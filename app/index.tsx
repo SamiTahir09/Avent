@@ -1,8 +1,7 @@
 import { Redirect } from "expo-router";
 import { View, ActivityIndicator } from "react-native";
-import { auth } from "@/config/FirebaseConfig";
+import { auth, onAuthStateChanged } from "@/config/FirebaseConfig";
 import { useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
 
 export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);

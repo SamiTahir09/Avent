@@ -11,6 +11,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import StartNewTripCard from "@/components/MyTrips/StartNewTripCard";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "@/config/FirebaseConfig";
+import { isDemoMode } from "@/config/env";
+import { demoGetTrips } from "@/config/demoMode";
 import UserTripList from "@/components/MyTrips/UserTripList";
 import { useRouter } from "expo-router";
 
@@ -27,6 +29,14 @@ const MyTrip = () => {
   const getMyTrips = async () => {
     setLoading(true);
     setUserTrips([]);
+
+    if (isDemoMode()) {
+      const trips = await demoGetTrips(user?.email || "");
+      setUserTrips(trips);
+      setLoading(false);
+      return;
+    }
+
     const q = query(
       collection(db, "UserTrips"),
       where("userEmail", "==", user?.email)

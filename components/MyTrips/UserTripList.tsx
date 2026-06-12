@@ -4,6 +4,10 @@ import moment from "moment";
 import CustomButton from "../CustomButton";
 import UserTripCard from "./UserTripCard";
 import { useRouter } from "expo-router";
+import { isDemoMode } from "@/config/env";
+
+const DEFAULT_TRIP_IMAGE =
+  "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800";
 
 const UserTripList = ({ userTrips }: { userTrips: any[] }) => {
   const router = useRouter();
@@ -36,10 +40,13 @@ const UserTripList = ({ userTrips }: { userTrips: any[] }) => {
   return (
     <View className="mb-16">
       <View>
-        {locationInfo?.photoRef && (
+        {(locationInfo?.photoRef || isDemoMode()) && (
           <Image
             source={{
-              uri: `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${locationInfo?.photoRef}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`,
+              uri:
+                isDemoMode() || !locationInfo?.photoRef
+                  ? DEFAULT_TRIP_IMAGE
+                  : `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${locationInfo.photoRef}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`,
             }}
             className={`w-full h-60 rounded-2xl mt-5 ${
               isPastTrip ? "grayscale" : ""

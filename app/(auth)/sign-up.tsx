@@ -6,6 +6,8 @@ import CustomButton from "@/components/CustomButton";
 import { Link, router } from "expo-router";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/config/FirebaseConfig";
+import { isDemoMode } from "@/config/env";
+import { demoSignUp } from "@/config/demoMode";
 import DummyLogin from "@/components/DummyLogin";
 
 const SignUp = () => {
@@ -23,17 +25,21 @@ const SignUp = () => {
         return;
       }
 
+      if (isDemoMode()) {
+        await demoSignUp(form.email, form.password);
+        router.replace("/(tabs)/mytrip");
+        return;
+      }
+
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         form.email,
         form.password
       );
 
-      // Successfully created user
       const user = userCredential.user;
       console.log(user);
 
-      // Navigate to the main app
       router.replace("/(tabs)/mytrip");
     } catch (error: any) {
       // Handle specific Firebase auth errors

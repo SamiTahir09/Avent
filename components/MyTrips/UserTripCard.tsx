@@ -3,6 +3,10 @@ import React from "react";
 import moment from "moment";
 import CustomButton from "../CustomButton";
 import { useRouter } from "expo-router";
+import { isDemoMode } from "@/config/env";
+
+const DEFAULT_TRIP_IMAGE =
+  "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400";
 
 const UserTripCard = ({ trip }: { trip: any }) => {
   const router = useRouter();
@@ -15,14 +19,16 @@ const UserTripCard = ({ trip }: { trip: any }) => {
   const endDate = tripData?.find((item: any) => item.dates)?.dates?.endDate;
 
   const isPastTrip = moment().isAfter(moment(endDate));
+  const tripImage =
+    isDemoMode() || !locationInfo?.photoRef
+      ? DEFAULT_TRIP_IMAGE
+      : `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${locationInfo.photoRef}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`;
 
   return (
     <View className="mt-5 flex flex-row gap-3">
       <View className="w-32 h-32">
         <Image
-          source={{
-            uri: `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${locationInfo?.photoRef}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`,
-          }}
+          source={{ uri: tripImage }}
           className={`w-full h-full rounded-2xl ${
             isPastTrip ? "grayscale" : ""
           }`}

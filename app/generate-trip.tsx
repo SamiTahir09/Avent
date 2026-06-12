@@ -7,6 +7,8 @@ import { chatSession } from "@/config/GeminiConfig";
 import { useRouter } from "expo-router";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/config/FirebaseConfig";
+import { isDemoMode } from "@/config/env";
+import { demoSaveTrip } from "@/config/demoMode";
 
 const GenerateTrip = () => {
   const { tripData } = useContext(CreateTripContext);
@@ -50,12 +52,18 @@ const GenerateTrip = () => {
 
     const docId = Date.now().toString();
 
-    const res = await setDoc(doc(db, "UserTrips", docId), {
+    const tripRecord = {
       userEmail: user?.email,
       tripPlan: tripResponse,
       tripData: JSON.stringify(tripData),
       docId: docId,
-    });
+    };
+
+    if (isDemoMode()) {
+      await demoSaveTrip(tripRecord);
+    } else {
+      await setDoc(doc(db, "UserTrips", docId), tripRecord);
+    }
 
     router.push("/mytrip");
   };

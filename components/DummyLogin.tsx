@@ -3,18 +3,25 @@ import React from "react";
 import CustomButton from "./CustomButton";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/config/FirebaseConfig";
+import { isDemoMode } from "@/config/env";
+import { demoSignIn } from "@/config/demoMode";
 import { router } from "expo-router";
 
 const DummyLogin = () => {
   const handleDummyLogin = async () => {
     try {
+      if (isDemoMode()) {
+        await demoSignIn("demo@avent.app", "demo123");
+        router.replace("/(tabs)/mytrip");
+        return;
+      }
+
       const userCredential = await signInWithEmailAndPassword(
         auth,
         "testuser@gmail.com",
         "testuser123"
       );
 
-      // Successfully signed in
       const user = userCredential.user;
       console.log("Logged in with dummy account:", user.email);
 
