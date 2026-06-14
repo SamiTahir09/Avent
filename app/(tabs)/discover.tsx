@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Image, Linking } from "react-native";
+import { View, Text, ScrollView, Image, Linking, Alert } from "react-native";
 import React, { useEffect, useState } from "react";
 import { useLocalSearchParams } from "expo-router";
 import moment from "moment";
@@ -20,13 +20,18 @@ const Discover = () => {
           placeName
         )}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`
       );
+
       const data = await response.json();
 
-      if (data.results && data.results[0] && data.results[0].photos) {
-        const photoReference = data.results[0].photos[0].photo_reference;
-        return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${photoReference}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`;
-      }
-      return DEFAULT_IMAGE_URL;
+      const place = data.results?.[0];
+
+      if (!place) return DEFAULT_IMAGE_URL;
+
+      const photoRef = place.photos?.[0]?.photo_reference;
+
+      if (!photoRef) return DEFAULT_IMAGE_URL;
+
+      return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photoRef}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`;
     } catch (error) {
       console.error("Error fetching place image:", error);
       return DEFAULT_IMAGE_URL;
@@ -39,7 +44,6 @@ const Discover = () => {
       setParsedTripData(JSON.parse(tripData as string));
       setParsedTripPlan(parsedTrip);
 
-      // Fetch images for hotels
       parsedTrip.trip_plan.hotel.options.forEach(
         async (hotel: any, index: number) => {
           const imageUrl = await fetchPlaceImage(hotel.name);
@@ -58,7 +62,6 @@ const Discover = () => {
         }
       );
 
-      // Fetch images for places to visit
       parsedTrip.trip_plan.places_to_visit.forEach(
         async (place: any, index: number) => {
           const imageUrl = await fetchPlaceImage(place.name);
@@ -87,6 +90,28 @@ const Discover = () => {
     );
   }
 
+  // ✅ FIXED BOOKING FUNCTION
+  const handleBooking = async (url: string) => {
+    try {
+      if (!url || url.includes("example.com") || !url.startsWith("http")) {
+        Alert.alert("Error", "Invalid booking link");
+        return;
+      }
+
+      const supported = await Linking.canOpenURL(url);
+
+      if (!supported) {
+        Alert.alert("Error", "This link cannot be opened");
+        return;
+      }
+
+      await Linking.openURL(url);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", "Something went wrong while opening booking");
+    }
+  };
+
   const handleOpenMap = (latitude: number, longitude: number) => {
     const url = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
     Linking.openURL(url);
@@ -112,9 +137,6 @@ const Discover = () => {
         <Text className="font-outfit text-gray-600">
           Budget: {parsedTripPlan.trip_plan.budget}
         </Text>
-        {/* <Text className="font-outfit text-gray-600">
-          Group Size: {parsedTripPlan.group_size}
-        </Text> */}
       </View>
 
       {/* Flight Details */}
@@ -131,7 +153,9 @@ const Discover = () => {
                 {parsedTripPlan.trip_plan.flight_details.departure_time}
               </Text>
             </View>
+
             <Ionicons name="airplane" size={24} color="#8b5cf6" />
+
             <View>
               <Text className="font-outfit-bold text-lg">
                 {parsedTripPlan.trip_plan.flight_details.arrival_city}
@@ -142,6 +166,7 @@ const Discover = () => {
               </Text>
             </View>
           </View>
+
           <View className="border-t border-gray-200 pt-4">
             <Text className="font-outfit text-gray-600">
               Airline: {parsedTripPlan.trip_plan.flight_details.airline}
@@ -152,10 +177,12 @@ const Discover = () => {
             <Text className="font-outfit text-gray-600">
               Price: {parsedTripPlan.trip_plan.flight_details.price}
             </Text>
+
+            {/* ✅ ONLY CHANGE HERE */}
             <CustomButton
               title="Book Flight"
               onPress={() =>
-                Linking.openURL(
+                handleBooking(
                   parsedTripPlan.trip_plan.flight_details.booking_url
                 )
               }
@@ -191,6 +218,7 @@ const Discover = () => {
               <Text className="font-outfit text-gray-600 mt-2">
                 {hotel.description}
               </Text>
+
               <CustomButton
                 title="View on Map"
                 onPress={() =>
@@ -208,7 +236,10 @@ const Discover = () => {
 
       {/* Places to Visit */}
       <View className="mb-8">
-        <Text className="text-2xl font-outfit-bold mb-4">Places to Visit</Text>
+        <Text className="text-2xl font-outfit-bold mb-4">
+          Places to Visit
+        </Text>
+
         {parsedTripPlan.trip_plan.places_to_visit.map(
           (place: any, index: number) => (
             <View
@@ -229,6 +260,7 @@ const Discover = () => {
               <Text className="font-outfit text-gray-600">
                 Time to Travel: {place.time_to_travel}
               </Text>
+
               <CustomButton
                 title="View on Map"
                 onPress={() =>
