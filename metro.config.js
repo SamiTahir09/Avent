@@ -1,13 +1,7 @@
 const { getDefaultConfig } = require("expo/metro-config");
 const { withNativeWind } = require("nativewind/metro");
 
-const config = getDefaultConfig(__dirname, {
-  // Add this configuration
-  resolver: {
-    assetExts: ["ttf", "png", "jpg"],
-    sourceExts: ["js", "jsx", "ts", "tsx", "svg"],
-  },
-});
+const config = getDefaultConfig(__dirname);
 
 // Add this configuration for SVG support
 const { transformer, resolver } = config;
