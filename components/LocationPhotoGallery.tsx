@@ -10,12 +10,14 @@ import {
   StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import GooglePlacesService from "../services/GooglePlaces";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_WIDTH = SCREEN_WIDTH * 0.72;
 const CARD_HEIGHT = 200;
 
 const UNSPLASH_KEY = process.env.EXPO_PUBLIC_UNSPLASH_ACCESS_KEY || "";
+const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_API_KEY || "";
 
 // ──────────────────────────────────────────────
 //  Types
@@ -38,131 +40,47 @@ interface Props {
 //  Category icon mapping
 // ──────────────────────────────────────────────
 const CATEGORY_ICONS: Record<string, any> = {
-  Overview:   "earth-outline",
-  Landmark:   "business-outline",
+  Overview: "earth-outline",
+  Landmark: "business-outline",
   Attraction: "telescope-outline",
-  Hotel:      "bed-outline",
+  Hotel: "bed-outline",
   Restaurant: "restaurant-outline",
-  Nature:     "leaf-outline",
-  Street:     "map-outline",
+  Nature: "leaf-outline",
+  Street: "map-outline",
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  Overview:   "#6d28d9",
-  Landmark:   "#2563eb",
+  Overview: "#6d28d9",
+  Landmark: "#2563eb",
   Attraction: "#d97706",
-  Hotel:      "#059669",
+  Hotel: "#059669",
   Restaurant: "#dc2626",
-  Nature:     "#16a34a",
-  Street:     "#0891b2",
+  Nature: "#16a34a",
+  Street: "#0891b2",
 };
 
 // ──────────────────────────────────────────────
-//  Unsplash search helper
-// ──────────────────────────────────────────────
-const fetchUnsplashPhoto = async (
-  query: string,
-  page = 1
-): Promise<{ uri: string; photographer: string; photographerUrl: string } | null> => {
-  if (!UNSPLASH_KEY) return null;
-  try {
-    const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(
-      query
-    )}&per_page=5&page=${page}&orientation=landscape`;
-    const res = await fetch(url, {
-      headers: { Authorization: `Client-ID ${UNSPLASH_KEY}` },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const results = data?.results || [];
-    if (!results.length) return null;
-    // Pick a varied result based on page
-    const pick = results[Math.floor(Math.random() * Math.min(results.length, 3))];
-    return {
-      uri: pick.urls?.regular || pick.urls?.small || "",
-      photographer: pick.user?.name || "",
-      photographerUrl: pick.user?.links?.html || "",
-    };
-  } catch {
-    return null;
-  }
-};
-
-// ──────────────────────────────────────────────
-//  Wikipedia summary image (fallback)
-// ──────────────────────────────────────────────
-const fetchWikiSummaryImage = async (term: string): Promise<string> => {
-  try {
-    const clean = term.split(",")[0].trim().replace(/\s+/g, "_");
-    const res = await fetch(
-      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(clean)}`
-    );
-    if (!res.ok) return "";
-    const data = await res.json();
-    return data.originalimage?.source || data.thumbnail?.source || "";
-  } catch {
-    return "";
-  }
-};
-
-// ──────────────────────────────────────────────
-//  Main fetcher – uses Unsplash for every category
+//  Main fetcher – use Google Places Photos where possible
 // ──────────────────────────────────────────────
 const fetchLocationPhotos = async (
   locationName: string,
   googleApiKey?: string
 ): Promise<PhotoItem[]> => {
-  const city = locationName.split(",")[0].trim();
-  const country = locationName.includes(",")
-    ? locationName.split(",").slice(1).join(",").trim()
-    : "";
-  const fullSearch = country ? `${city} ${country}` : city;
-
+  const apiKey = googleApiKey || GOOGLE_API_KEY;
   const photos: PhotoItem[] = [];
 
-  const categories: { query: string; label: string; cat: string }[] = [
-    { query: `${fullSearch} city overview`,     label: "Overview",    cat: "Overview"   },
-    { query: `${fullSearch} famous landmark`,   label: "Landmark",    cat: "Landmark"   },
-    { query: `${fullSearch} tourist attraction`,label: "Attraction",  cat: "Attraction" },
-    { query: `${fullSearch} luxury hotel`,      label: "Hotel",       cat: "Hotel"      },
-    { query: `${fullSearch} local food restaurant`, label: "Restaurant", cat: "Restaurant"},
-    { query: `${fullSearch} nature scenery`,    label: "Nature",      cat: "Nature"     },
-    { query: `${fullSearch} street architecture`,label: "Street View",cat: "Street"     },
-  ];
+  if (!apiKey) return photos;
 
-  // Fetch Unsplash photos concurrently for all categories
-  const results = await Promise.all(
-    categories.map((c, i) => fetchUnsplashPhoto(c.query, i + 1))
-  );
-
-  for (let i = 0; i < categories.length; i++) {
-    const r = results[i];
-    if (r && r.uri) {
-      photos.push({
-        uri: r.uri,
-        label: categories[i].label,
-        category: categories[i].cat,
-        photographer: r.photographer,
-        photographerUrl: r.photographerUrl,
-      });
+  try {
+    const resp = await GooglePlacesService.getPhotosForLocation(locationName, apiKey, 8);
+    if (resp && resp.urls && resp.urls.length) {
+      resp.urls.forEach((u, i) =>
+        photos.push({ uri: u, label: resp.name || `Photo ${i + 1}`, category: "Overview" })
+      );
+      return photos;
     }
-  }
-
-  // If Unsplash returned nothing (no key or quota), fall back to Wikipedia
-  if (photos.length === 0) {
-    const wikiImg = await fetchWikiSummaryImage(locationName);
-    if (wikiImg) {
-      photos.push({ uri: wikiImg, label: city, category: "Overview" });
-    }
-    // Generic travel fallbacks
-    const fallbacks = [
-      { uri: "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800", label: "Landmark",   category: "Landmark"   },
-      { uri: "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800", label: "Attraction", category: "Attraction" },
-      { uri: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800", label: "Hotel",      category: "Hotel"      },
-      { uri: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800", label: "Restaurant", category: "Restaurant" },
-      { uri: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800", label: "Nature",     category: "Nature"     },
-    ];
-    photos.push(...fallbacks);
+  } catch (e) {
+    // fall through to empty
   }
 
   return photos;

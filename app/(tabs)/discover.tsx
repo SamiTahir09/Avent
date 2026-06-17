@@ -9,6 +9,28 @@ import LocationPhotoGallery from "@/components/LocationPhotoGallery";
 const DEFAULT_IMAGE_URL =
   "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?q=80&w=2071&auto=format&fit=crop";
 
+const UNSPLASH_KEY = process.env.EXPO_PUBLIC_UNSPLASH_ACCESS_KEY || "";
+
+const fetchUnsplashImage = async (query: string) => {
+  if (!UNSPLASH_KEY) return "";
+  try {
+    const res = await fetch(
+      `https://api.unsplash.com/search/photos?query=${encodeURIComponent(
+        query
+      )}&per_page=3&orientation=landscape`,
+      { headers: { Authorization: `Client-ID ${UNSPLASH_KEY}` } }
+    );
+    if (!res.ok) return "";
+    const data = await res.json();
+    const results = data?.results || [];
+    if (!results.length) return "";
+    const pick = results[Math.floor(Math.random() * Math.min(results.length, 3))];
+    return pick?.urls?.regular || pick?.urls?.small || "";
+  } catch (e) {
+    return "";
+  }
+};
+
 const Discover = () => {
   const { tripData, tripPlan } = useLocalSearchParams();
   const [parsedTripData, setParsedTripData] = useState<any>(null);
@@ -17,7 +39,7 @@ const Discover = () => {
   const fetchPlaceImage = async (placeName: string) => {
     const defaultFallback = "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?q=80&w=2071&auto=format&fit=crop";
     const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY;
-    
+
     if (apiKey) {
       try {
         const response = await fetch(
@@ -60,41 +82,70 @@ const Discover = () => {
     if (tripData && tripPlan) {
       const parsedTrip = JSON.parse(tripPlan as string);
       setParsedTripData(JSON.parse(tripData as string));
+      // assign parsed plan first
       setParsedTripPlan(parsedTrip);
 
-      parsedTrip.trip_plan.hotel.options.forEach(
-        async (hotel: any, index: number) => {
-          const imageUrl = await fetchPlaceImage(hotel.name);
+      // fetch hotel images in parallel and update once
+      (async () => {
+        try {
+          const hotels = parsedTrip.trip_plan.hotel.options || [];
+          const hotelImgPromises = hotels.map((h: any) =>
+            (async () => {
+              // prefer existing image_url if provided by the plan
+              if (h.image_url) return h.image_url;
+              const fromPlace = await fetchPlaceImage(h.name);
+              if (fromPlace && fromPlace !== DEFAULT_IMAGE_URL) return fromPlace;
+              const fromUnsplash = await fetchUnsplashImage(`${h.name.split(",")[0].trim()} hotel`);
+              return fromUnsplash || DEFAULT_IMAGE_URL;
+            })()
+          );
+          const hotelImgs = await Promise.all(hotelImgPromises);
           setParsedTripPlan((prev: any) => ({
             ...prev,
             trip_plan: {
               ...prev.trip_plan,
               hotel: {
                 ...prev.trip_plan.hotel,
-                options: prev.trip_plan.hotel.options.map((h: any, i: number) =>
-                  i === index ? { ...h, image_url: imageUrl } : h
-                ),
+                options: prev.trip_plan.hotel.options.map((h: any, i: number) => ({
+                  ...h,
+                  image_url: hotelImgs[i] || h.image_url || DEFAULT_IMAGE_URL,
+                })),
               },
             },
           }));
+        } catch (e) {
+          console.error("Error fetching hotel images:", e);
         }
-      );
+      })();
 
-      parsedTrip.trip_plan.places_to_visit.forEach(
-        async (place: any, index: number) => {
-          const imageUrl = await fetchPlaceImage(place.name);
+      // fetch place images in parallel and update once
+      (async () => {
+        try {
+          const places = parsedTrip.trip_plan.places_to_visit || [];
+          const placeImgPromises = places.map((p: any) =>
+            (async () => {
+              if (p.image_url) return p.image_url;
+              const fromPlace = await fetchPlaceImage(p.name);
+              if (fromPlace && fromPlace !== DEFAULT_IMAGE_URL) return fromPlace;
+              const fromUnsplash = await fetchUnsplashImage(`${p.name.split(",")[0].trim()} travel`);
+              return fromUnsplash || DEFAULT_IMAGE_URL;
+            })()
+          );
+          const placeImgs = await Promise.all(placeImgPromises);
           setParsedTripPlan((prev: any) => ({
             ...prev,
             trip_plan: {
               ...prev.trip_plan,
-              places_to_visit: prev.trip_plan.places_to_visit.map(
-                (p: any, i: number) =>
-                  i === index ? { ...p, image_url: imageUrl } : p
-              ),
+              places_to_visit: prev.trip_plan.places_to_visit.map((p: any, i: number) => ({
+                ...p,
+                image_url: placeImgs[i] || p.image_url || DEFAULT_IMAGE_URL,
+              })),
             },
           }));
+        } catch (e) {
+          console.error("Error fetching place images:", e);
         }
-      );
+      })();
     }
   }, [tripData, tripPlan]);
 
@@ -119,21 +170,20 @@ const Discover = () => {
     if (type === "flight") {
       const fromEnc = encodeURIComponent(from);
       const toEnc = encodeURIComponent(to);
-      url = `https://www.google.com/travel/flights?q=Flights+from+${fromEnc}+to+${toEnc}`;
+      // Prefer Emirates booking. Use a site-restricted Google search to find matching Emirates routes
+      // when we have origin/destination; otherwise open Emirates homepage.
+      url = from && to
+        ? `https://www.google.com/search?q=site:emirates.com+Flights+from+${fromEnc}+to+${toEnc}`
+        : `https://www.emirates.com/`;
     } else if (type === "bus") {
       const fromEnc = encodeURIComponent(from);
       const toEnc = encodeURIComponent(to);
 
-      if (platform === "daewoo") {
-        // Daewoo Express official booking site
-        url = `https://daewooexpress.com/booking`;
-      } else if (platform === "faisal") {
-        // Faisal Movers official site
-        url = `https://faisalmovers.com`;
-      } else if (platform === "flixbus") {
+      if (platform === "flixbus") {
         url = `https://global.flixbus.com/bus-routes`;
       } else if (platform === "redbus") {
-        url = `https://www.redbus.pk`;
+        // use global redbus domain which redirects appropriately for many regions
+        url = `https://www.redbus.com`;
       } else {
         url = `https://www.google.com/search?q=online+bus+booking+${fromEnc}+to+${toEnc}`;
       }
@@ -227,7 +277,7 @@ const Discover = () => {
               Price: {parsedTripPlan.trip_plan.flight_details.price}
             </Text>
 
-            {/* ✅ REAL FLIGHT BOOKING — Google Flights */}
+            {/* ✅ REAL FLIGHT BOOKING — Emirates */}
             <TouchableOpacity
               onPress={() => handleBooking("flight")}
               style={{
@@ -243,7 +293,7 @@ const Discover = () => {
             >
               <Ionicons name="airplane" size={20} color="#fff" />
               <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>
-                Book Flight on Google Flights
+                Book Flight on Emirates
               </Text>
             </TouchableOpacity>
           </View>
@@ -266,34 +316,6 @@ const Discover = () => {
           {/* Pakistan Bus Options */}
           <Text style={{ fontWeight: "700", marginBottom: 10, color: "#6d28d9" }}>🇵🇰 Pakistan</Text>
           <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
-            <TouchableOpacity
-              onPress={() => handleBooking("bus", "daewoo")}
-              style={{
-                flex: 1,
-                backgroundColor: "#7c3aed",
-                borderRadius: 12,
-                paddingVertical: 14,
-                alignItems: "center",
-              }}
-            >
-              <FontAwesome5 name="bus" size={18} color="#fff" />
-              <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Daewoo Bus</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => handleBooking("bus", "faisal")}
-              style={{
-                flex: 1,
-                backgroundColor: "#059669",
-                borderRadius: 12,
-                paddingVertical: 14,
-                alignItems: "center",
-              }}
-            >
-              <FontAwesome5 name="bus-alt" size={18} color="#fff" />
-              <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Faisal Movers</Text>
-            </TouchableOpacity>
-
             <TouchableOpacity
               onPress={() => handleBooking("bus", "redbus")}
               style={{
