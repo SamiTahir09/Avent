@@ -360,6 +360,49 @@ const Discover = () => {
                 </TouchableOpacity>
               </View>
 
+              {/* Direct Airline Links: Emirates & Qatar */}
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+                <TouchableOpacity
+                  onPress={async () => {
+                    try {
+                      await Linking.openURL("https://www.emirates.com/?utm_source=chatgpt.com");
+                    } catch (e) {
+                      Alert.alert("Error", "Unable to open Emirates website.");
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#111827",
+                    borderRadius: 12,
+                    paddingVertical: 14,
+                    alignItems: "center",
+                  }}
+                >
+                  <Ionicons name="airplane" size={18} color="#fff" />
+                  <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Emirates</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={async () => {
+                    try {
+                      await Linking.openURL("https://www.qatarairways.com/?utm_source=chatgpt.com");
+                    } catch (e) {
+                      Alert.alert("Error", "Unable to open Qatar Airways website.");
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#6d28d9",
+                    borderRadius: 12,
+                    paddingVertical: 14,
+                    alignItems: "center",
+                  }}
+                >
+                  <Ionicons name="airplane" size={18} color="#fff" />
+                  <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Qatar Airways</Text>
+                </TouchableOpacity>
+              </View>
+
               <TouchableOpacity
                 onPress={async () => {
                   try {

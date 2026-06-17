@@ -84,15 +84,6 @@ const PlaceMapView: React.FC<Props> = ({ lat, lng, name, apiKey, onClose }) => {
                     <Text>Location unavailable</Text>
                 </View>
             )}
-                {nearby.map((n) => (
-                    <Marker
-                        key={n.placeId}
-                        coordinate={{ latitude: n.lat, longitude: n.lng }}
-                        title={n.name}
-                        description={n.address}
-                    />
-                ))}
-            </MapView>
 
             <View style={styles.controls}>
                 <TouchableOpacity onPress={() => setSatellite((s) => !s)} style={styles.controlBtn}>
