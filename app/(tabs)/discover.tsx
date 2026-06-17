@@ -1,8 +1,8 @@
-import { View, Text, ScrollView, Image, Linking, Alert } from "react-native";
+import { View, Text, ScrollView, Image, Linking, Alert, TouchableOpacity } from "react-native";
 import React, { useEffect, useState } from "react";
 import { useLocalSearchParams } from "expo-router";
 import moment from "moment";
-import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import CustomButton from "@/components/CustomButton";
 import LocationPhotoGallery from "@/components/LocationPhotoGallery";
 
@@ -108,22 +108,44 @@ const Discover = () => {
     );
   }
 
-  // ✅ FIXED BOOKING FUNCTION
-  const handleBooking = async (url: string) => {
+  // ✅ SMART BOOKING FUNCTION — builds real URLs
+  const handleBooking = async (type: "flight" | "bus", platform?: string) => {
+    const flight = parsedTripPlan?.trip_plan?.flight_details;
+    const from = flight?.departure_city || "";
+    const to = flight?.arrival_city || parsedTripPlan?.trip_plan?.location || "";
+    const date = flight?.departure_date || "";
+
+    let url = "";
+
+    if (type === "flight") {
+      // Google Flights — always works
+      const fromEnc = encodeURIComponent(from);
+      const toEnc = encodeURIComponent(to);
+      url = `https://www.google.com/travel/flights?q=Flights+from+${fromEnc}+to+${toEnc}`;
+    } else if (type === "bus") {
+      const fromEnc = encodeURIComponent(from);
+      const toEnc = encodeURIComponent(to);
+
+      if (platform === "daewoo") {
+        url = `https://www.daewoobus.com.pk`;
+      } else if (platform === "faisal") {
+        url = `https://www.faisalmoversbooking.com`;
+      } else if (platform === "flixbus") {
+        url = `https://global.flixbus.com/bus-routes`;
+      } else if (platform === "redbus") {
+        url = `https://www.redbus.pk`;
+      } else {
+        url = `https://www.google.com/search?q=bus+booking+${fromEnc}+to+${toEnc}`;
+      }
+    }
+
     try {
-      if (!url || url.includes("example.com") || !url.startsWith("http")) {
-        Alert.alert("Error", "Invalid booking link");
-        return;
-      }
-
       const supported = await Linking.canOpenURL(url);
-
-      if (!supported) {
-        Alert.alert("Error", "This link cannot be opened");
-        return;
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert("Error", "Cannot open this link on your device");
       }
-
-      await Linking.openURL(url);
     } catch (error) {
       console.error(error);
       Alert.alert("Error", "Something went wrong while opening booking");
@@ -203,16 +225,118 @@ const Discover = () => {
               Price: {parsedTripPlan.trip_plan.flight_details.price}
             </Text>
 
-            {/* ✅ ONLY CHANGE HERE */}
-            <CustomButton
-              title="Book Flight"
-              onPress={() =>
-                handleBooking(
-                  parsedTripPlan.trip_plan.flight_details.booking_url
-                )
-              }
-              className="mt-4"
-            />
+            {/* ✅ REAL FLIGHT BOOKING — Google Flights */}
+            <TouchableOpacity
+              onPress={() => handleBooking("flight")}
+              style={{
+                backgroundColor: "#8b5cf6",
+                borderRadius: 12,
+                paddingVertical: 14,
+                marginTop: 16,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}
+            >
+              <Ionicons name="airplane" size={20} color="#fff" />
+              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>
+                Book Flight on Google Flights
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
+      {/* ─────────────── BUS BOOKING SECTION ─────────────── */}
+      <View className="mb-8">
+        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16, gap: 8 }}>
+          <FontAwesome5 name="bus" size={22} color="#7c3aed" />
+          <Text className="text-2xl font-outfit-bold">Book Bus Seat</Text>
+        </View>
+
+        <View style={{ backgroundColor: "#f5f3ff", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#ddd6fe" }}>
+          <Text style={{ fontFamily: "outfit", color: "#4b5563", marginBottom: 12, fontSize: 14 }}>
+            📍 From: {parsedTripPlan.trip_plan.flight_details.departure_city || "Your City"}{"  ➜  "}
+            {parsedTripPlan.trip_plan.flight_details.arrival_city || parsedTripPlan.trip_plan.location}
+          </Text>
+
+          {/* Pakistan Bus Options */}
+          <Text style={{ fontWeight: "700", marginBottom: 10, color: "#6d28d9" }}>🇵🇰 Pakistan</Text>
+          <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
+            <TouchableOpacity
+              onPress={() => handleBooking("bus", "daewoo")}
+              style={{
+                flex: 1,
+                backgroundColor: "#7c3aed",
+                borderRadius: 12,
+                paddingVertical: 14,
+                alignItems: "center",
+              }}
+            >
+              <FontAwesome5 name="bus" size={18} color="#fff" />
+              <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Daewoo Bus</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => handleBooking("bus", "faisal")}
+              style={{
+                flex: 1,
+                backgroundColor: "#059669",
+                borderRadius: 12,
+                paddingVertical: 14,
+                alignItems: "center",
+              }}
+            >
+              <FontAwesome5 name="bus-alt" size={18} color="#fff" />
+              <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Faisal Movers</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => handleBooking("bus", "redbus")}
+              style={{
+                flex: 1,
+                backgroundColor: "#dc2626",
+                borderRadius: 12,
+                paddingVertical: 14,
+                alignItems: "center",
+              }}
+            >
+              <FontAwesome5 name="ticket-alt" size={18} color="#fff" />
+              <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>RedBus PK</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* International Bus Options */}
+          <Text style={{ fontWeight: "700", marginBottom: 10, color: "#6d28d9" }}>🌍 International</Text>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <TouchableOpacity
+              onPress={() => handleBooking("bus", "flixbus")}
+              style={{
+                flex: 1,
+                backgroundColor: "#16a34a",
+                borderRadius: 12,
+                paddingVertical: 14,
+                alignItems: "center",
+              }}
+            >
+              <FontAwesome5 name="bus" size={18} color="#fff" />
+              <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>FlixBus</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => handleBooking("bus")}
+              style={{
+                flex: 1,
+                backgroundColor: "#0369a1",
+                borderRadius: 12,
+                paddingVertical: 14,
+                alignItems: "center",
+              }}
+            >
+              <Ionicons name="search" size={18} color="#fff" />
+              <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Search More</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
