@@ -40,19 +40,23 @@ const UserTripList = ({ userTrips }: { userTrips: any[] }) => {
   return (
     <View className="mb-16">
       <View>
-        {(locationInfo?.photoRef || isDemoMode()) && (
-          <Image
-            source={{
-              uri:
-                isDemoMode() || !locationInfo?.photoRef
-                  ? DEFAULT_TRIP_IMAGE
-                  : `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${locationInfo.photoRef}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`,
-            }}
-            className={`w-full h-60 rounded-2xl mt-5 ${
-              isPastTrip ? "grayscale" : ""
-            }`}
-          />
-        )}
+        {(() => {
+          const placeName = sortedTrips[0]?.tripPlan?.trip_plan?.location || locationInfo?.name || "travel";
+          const cleanPlaceName = encodeURIComponent(placeName.split(",")[0].trim());
+          const tripImage =
+            isDemoMode() || !locationInfo?.photoRef
+              ? `https://loremflickr.com/800/600/${cleanPlaceName},travel/all`
+              : `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${locationInfo.photoRef}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`;
+
+          return (
+            <Image
+              source={{ uri: tripImage }}
+              className={`w-full h-60 rounded-2xl mt-5 ${
+                isPastTrip ? "grayscale" : ""
+              }`}
+            />
+          );
+        })()}
         <View className="mt-3">
           <Text
             className={`font-outfit-medium text-xl ${

@@ -3,6 +3,7 @@ import React from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import moment from "moment";
 import CustomButton from "@/components/CustomButton";
+import { isDemoMode } from "@/config/env";
 
 const TripDetails = () => {
   const router = useRouter();
@@ -24,12 +25,17 @@ const TripDetails = () => {
   const totalNumberOfDays = moment(endDate).diff(startDate, "days") + 1;
   const budget = parsedTripData?.find((item: any) => item.budget)?.budget?.type;
 
+  const placeName = parsedTripPlan?.trip_plan?.location || locationInfo?.name || "travel";
+  const cleanPlaceName = encodeURIComponent(placeName.split(",")[0].trim());
+  const tripImage =
+    isDemoMode() || !locationInfo?.photoRef
+      ? `https://loremflickr.com/800/600/${cleanPlaceName},travel/all`
+      : `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${locationInfo.photoRef}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`;
+
   return (
     <ScrollView className="flex-1 bg-white">
       <Image
-        source={{
-          uri: `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${locationInfo?.photoRef}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`,
-        }}
+        source={{ uri: tripImage }}
         className="w-full h-72"
       />
 

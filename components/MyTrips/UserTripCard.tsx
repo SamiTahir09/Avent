@@ -19,9 +19,11 @@ const UserTripCard = ({ trip }: { trip: any }) => {
   const endDate = tripData?.find((item: any) => item.dates)?.dates?.endDate;
 
   const isPastTrip = moment().isAfter(moment(endDate));
+  const placeName = trip?.tripPlan?.trip_plan?.location || locationInfo?.name || "travel";
+  const cleanPlaceName = encodeURIComponent(placeName.split(",")[0].trim());
   const tripImage =
     isDemoMode() || !locationInfo?.photoRef
-      ? DEFAULT_TRIP_IMAGE
+      ? `https://loremflickr.com/400/400/${cleanPlaceName},travel/all`
       : `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${locationInfo.photoRef}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`;
 
   return (

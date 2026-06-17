@@ -14,27 +14,30 @@ const Discover = () => {
   const [parsedTripPlan, setParsedTripPlan] = useState<any>(null);
 
   const fetchPlaceImage = async (placeName: string) => {
+    const cleanName = encodeURIComponent((placeName || "").split(",")[0].trim());
+    const fallbackUrl = `https://loremflickr.com/800/600/${cleanName || "hotel"},travel/all`;
+    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY;
+    if (!apiKey) {
+      return fallbackUrl;
+    }
     try {
       const response = await fetch(
         `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
           placeName
-        )}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`
+        )}&key=${apiKey}`
       );
 
       const data = await response.json();
-
       const place = data.results?.[0];
-
-      if (!place) return DEFAULT_IMAGE_URL;
+      if (!place) return fallbackUrl;
 
       const photoRef = place.photos?.[0]?.photo_reference;
+      if (!photoRef) return fallbackUrl;
 
-      if (!photoRef) return DEFAULT_IMAGE_URL;
-
-      return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photoRef}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`;
+      return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photoRef}&key=${apiKey}`;
     } catch (error) {
       console.error("Error fetching place image:", error);
-      return DEFAULT_IMAGE_URL;
+      return fallbackUrl;
     }
   };
 
