@@ -200,4 +200,6 @@ export default {
   findPlace,
   fetchPlacePhotoUrls,
   getPhotosForLocation,
+  getPlaceDetails,
+  getNearbyPlaces,
 };

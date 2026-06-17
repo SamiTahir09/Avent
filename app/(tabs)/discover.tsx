@@ -170,6 +170,13 @@ const Discover = () => {
   }
 
   // ✅ SMART BOOKING FUNCTION — builds real URLs
+  const isPakistanTrip = () => {
+    const flight = parsedTripPlan?.trip_plan?.flight_details;
+    const from = (flight?.departure_city || "").toLowerCase();
+    const to = (flight?.arrival_city || parsedTripPlan?.trip_plan?.location || "").toLowerCase();
+    return from.includes("pak") || from.includes("pakistan") || to.includes("pak") || to.includes("pakistan");
+  };
+
   const handleBooking = async (type: "flight" | "bus", platform?: string) => {
     const flight = parsedTripPlan?.trip_plan?.flight_details;
     const from = flight?.departure_city || "";
@@ -182,20 +189,41 @@ const Discover = () => {
       const toEnc = encodeURIComponent(to);
       // Prefer Emirates booking. Use a site-restricted Google search to find matching Emirates routes
       // when we have origin/destination; otherwise open Emirates homepage.
+      // Add utm_source for tracking
+      const emiratesHome = `https://www.emirates.com/?utm_source=chatgpt.com`;
+      const qatarHome = `https://www.qatarairways.com/?utm_source=chatgpt.com`;
       url = from && to
         ? `https://www.google.com/search?q=site:emirates.com+Flights+from+${fromEnc}+to+${toEnc}`
-        : `https://www.emirates.com/`;
+        : emiratesHome;
+      // If airline is Qatar, prefer linking to Qatar site
+      const airline = (parsedTripPlan?.trip_plan?.flight_details?.airline || "").toLowerCase();
+      if (!from || !to) {
+        if (airline.includes("qatar")) url = qatarHome;
+        else if (airline.includes("emirates")) url = emiratesHome;
+      }
     } else if (type === "bus") {
       const fromEnc = encodeURIComponent(from);
       const toEnc = encodeURIComponent(to);
-
-      if (platform === "flixbus") {
-        url = `https://global.flixbus.com/bus-routes`;
-      } else if (platform === "redbus") {
-        // use global redbus domain which redirects appropriately for many regions
-        url = `https://www.redbus.com`;
+      // Only show Pakistan-specific bus providers when trip involves Pakistan
+      if (!isPakistanTrip()) {
+        // Non-Pakistan: prefer global providers
+        if (platform === "flixbus") {
+          url = `https://global.flixbus.com/bus-routes`;
+        } else if (platform === "redbus") {
+          url = `https://www.redbus.com`;
+        } else {
+          url = `https://www.google.com/search?q=online+bus+booking+${fromEnc}+to+${toEnc}`;
+        }
       } else {
-        url = `https://www.google.com/search?q=online+bus+booking+${fromEnc}+to+${toEnc}`;
+        // Pakistan trip: prefer local sites
+        if (platform === "daewoo") {
+          url = `https://daewoo.com.pk/?utm_source=chatgpt.com`;
+        } else if (platform === "faisal") {
+          url = `https://faisalmovers.com/booking/?utm_source=chatgpt.com`;
+        } else {
+          // default to bookme for Pakistan
+          url = `https://bookme.pk/?utm_source=chatgpt.com`;
+        }
       }
     }
 
@@ -335,7 +363,8 @@ const Discover = () => {
               <TouchableOpacity
                 onPress={async () => {
                   try {
-                    await Linking.openURL("https://bookme.pk/pakistan-international-airlines");
+                    // PIA booking — add utm_source
+                    await Linking.openURL("https://bookme.pk/pakistan-international-airlines?utm_source=chatgpt.com");
                   } catch (e) {
                     Alert.alert("Error", "Unable to open PIA booking site.");
                   }
@@ -369,49 +398,55 @@ const Discover = () => {
             {parsedTripPlan.trip_plan.flight_details.arrival_city || parsedTripPlan.trip_plan.location}
           </Text>
 
-          {/* Pakistan Bus Options */}
-          <Text style={{ fontWeight: "700", marginBottom: 10, color: "#6d28d9" }}>🇵🇰 Pakistan</Text>
-          <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
-            <TouchableOpacity
-              onPress={async () => {
-                try {
-                  await Linking.openURL("https://daewoo.com.pk/");
-                } catch (e) {
-                  Alert.alert("Error", "Unable to open Daewoo website.");
-                }
-              }}
-              style={{
-                flex: 1,
-                backgroundColor: "#0b5efd",
-                borderRadius: 12,
-                paddingVertical: 14,
-                alignItems: "center",
-              }}
-            >
-              <FontAwesome5 name="bus" size={18} color="#fff" />
-              <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Daewoo</Text>
-            </TouchableOpacity>
+          {/* Pakistan Bus Options (shown only when trip involves Pakistan) */}
+          {isPakistanTrip() ? (
+            <>
+              <Text style={{ fontWeight: "700", marginBottom: 10, color: "#6d28d9" }}>🇵🇰 Pakistan</Text>
+              <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
+                <TouchableOpacity
+                  onPress={async () => {
+                    try {
+                      await Linking.openURL("https://daewoo.com.pk/?utm_source=chatgpt.com");
+                    } catch (e) {
+                      Alert.alert("Error", "Unable to open Daewoo website.");
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#0b5efd",
+                    borderRadius: 12,
+                    paddingVertical: 14,
+                    alignItems: "center",
+                  }}
+                >
+                  <FontAwesome5 name="bus" size={18} color="#fff" />
+                  <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Daewoo</Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={async () => {
-                try {
-                  await Linking.openURL("https://faisalmovers.com/booking/");
-                } catch (e) {
-                  Alert.alert("Error", "Unable to open Faisal Movers booking page.");
-                }
-              }}
-              style={{
-                flex: 1,
-                backgroundColor: "#0369a1",
-                borderRadius: 12,
-                paddingVertical: 14,
-                alignItems: "center",
-              }}
-            >
-              <FontAwesome5 name="ticket-alt" size={18} color="#fff" />
-              <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Faisal Movers</Text>
-            </TouchableOpacity>
-          </View>
+                <TouchableOpacity
+                  onPress={async () => {
+                    try {
+                      await Linking.openURL("https://faisalmovers.com/booking/?utm_source=chatgpt.com");
+                    } catch (e) {
+                      Alert.alert("Error", "Unable to open Faisal Movers booking page.");
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#0369a1",
+                    borderRadius: 12,
+                    paddingVertical: 14,
+                    alignItems: "center",
+                  }}
+                >
+                  <FontAwesome5 name="ticket-alt" size={18} color="#fff" />
+                  <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Faisal Movers</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <Text style={{ color: "#6b7280", marginBottom: 12 }}>Bus booking options shown for Pakistan trips only.</Text>
+          )}
         </View>
       </View>
 

@@ -27,8 +27,19 @@ const PlaceMapView: React.FC<Props> = ({ lat, lng, name, apiKey, onClose }) => {
     const [nearby, setNearby] = useState<NearbyItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [satellite, setSatellite] = useState(false);
+    const [region, setRegion] = useState(() => ({
+        latitude: Number(lat) || 0,
+        longitude: Number(lng) || 0,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+    }));
 
     useEffect(() => {
+        const nLat = Number(lat);
+        const nLng = Number(lng);
+        if (!isFinite(nLat) || !isFinite(nLng)) return;
+        setRegion({ latitude: nLat, longitude: nLng, latitudeDelta: 0.01, longitudeDelta: 0.01 });
+
         (async () => {
             if (!apiKey) return setLoading(false);
             setLoading(true);
@@ -50,13 +61,29 @@ const PlaceMapView: React.FC<Props> = ({ lat, lng, name, apiKey, onClose }) => {
 
     return (
         <View style={styles.container}>
-            <MapView
-                provider={PROVIDER_GOOGLE}
-                style={styles.map}
-                initialRegion={{ latitude: lat, longitude: lng, latitudeDelta: 0.01, longitudeDelta: 0.01 }}
-                mapType={satellite ? "satellite" : "standard"}
-            >
-                <Marker coordinate={{ latitude: lat, longitude: lng }} title={name || "Location"} />
+            {isFinite(region.latitude) && isFinite(region.longitude) ? (
+                <MapView
+                    provider={PROVIDER_GOOGLE}
+                    style={styles.map}
+                    region={region}
+                    onRegionChangeComplete={(r) => setRegion(r)}
+                    mapType={satellite ? "satellite" : "standard"}
+                >
+                    <Marker coordinate={{ latitude: region.latitude, longitude: region.longitude }} title={name || "Location"} />
+                    {nearby.map((n) => (
+                        <Marker
+                            key={n.placeId}
+                            coordinate={{ latitude: n.lat, longitude: n.lng }}
+                            title={n.name}
+                            description={n.address}
+                        />
+                    ))}
+                </MapView>
+            ) : (
+                <View style={[styles.map, { alignItems: "center", justifyContent: "center" }]}>
+                    <Text>Location unavailable</Text>
+                </View>
+            )}
                 {nearby.map((n) => (
                     <Marker
                         key={n.placeId}
@@ -95,7 +122,7 @@ const PlaceMapView: React.FC<Props> = ({ lat, lng, name, apiKey, onClose }) => {
                     />
                 )}
             </View>
-        </View>
+        </View >
     );
 };
 
