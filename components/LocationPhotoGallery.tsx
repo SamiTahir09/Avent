@@ -11,13 +11,15 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import GooglePlacesService from "../services/GooglePlaces";
+import PlaceMapView from "./PlaceMapView";
+import { Modal } from "react-native";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_WIDTH = SCREEN_WIDTH * 0.72;
 const CARD_HEIGHT = 200;
 
 const UNSPLASH_KEY = process.env.EXPO_PUBLIC_UNSPLASH_ACCESS_KEY || "";
-const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_API_KEY || "";
+const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY || "";
 
 // ──────────────────────────────────────────────
 //  Types
@@ -34,6 +36,7 @@ interface Props {
   locationName: string;
   googleApiKey?: string;
   style?: object;
+  useRandomPhotos?: boolean;
 }
 
 // ──────────────────────────────────────────────
@@ -87,35 +90,177 @@ const fetchLocationPhotos = async (
 };
 
 // ──────────────────────────────────────────────
+//  Random / Unsplash / Wikipedia fallbacks
+// ──────────────────────────────────────────────
+const fetchUnsplashPhotos = async (query: string, perPage = 8): Promise<PhotoItem[]> => {
+  if (!UNSPLASH_KEY) return [];
+  try {
+    const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=${perPage}&orientation=landscape`;
+    const res = await fetch(url, { headers: { Authorization: `Client-ID ${UNSPLASH_KEY}` } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const results = data?.results || [];
+    return results
+      .map((r: any, i: number) => ({
+        uri: r.urls?.regular || r.urls?.small || "",
+        label: r.alt_description || r.description || `Photo ${i + 1}`,
+        category: "Overview",
+        photographer: r.user?.name,
+        photographerUrl: r.user?.links?.html,
+      }))
+      .filter((p: PhotoItem) => !!p.uri);
+  } catch {
+    return [];
+  }
+};
+
+const fetchWikiSummaryImage = async (term: string): Promise<string> => {
+  try {
+    const clean = term.split(",")[0].trim().replace(/\s+/g, "_");
+    const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(clean)}`);
+    if (!res.ok) return "";
+    const data = await res.json();
+    return data.originalimage?.source || data.thumbnail?.source || "";
+  } catch {
+    return "";
+  }
+};
+
+const fetchRandomPhotos = async (locationName: string): Promise<PhotoItem[]> => {
+  const photos: PhotoItem[] = [];
+
+  // 1) Unsplash (if key present)
+  const unsplash = await fetchUnsplashPhotos(locationName, 8);
+  if (unsplash.length) return unsplash;
+
+  // 2) Wikipedia summary image
+  const wikiImg = await fetchWikiSummaryImage(locationName);
+  if (wikiImg) return [{ uri: wikiImg, label: locationName, category: "Overview" }];
+
+  // 3) Generic fallbacks
+  const fallbacks = [
+    "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800",
+    "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800",
+    "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",
+    "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800",
+    "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800",
+  ];
+  return fallbacks.map((u, i) => ({ uri: u, label: `Photo ${i + 1}`, category: "Overview" }));
+};
+
+// ──────────────────────────────────────────────
 //  Component
 // ──────────────────────────────────────────────
 const LocationPhotoGallery: React.FC<Props> = ({
   locationName,
   googleApiKey,
   style,
+  useRandomPhotos,
 }) => {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  const [fetchTrigger, setFetchTrigger] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
+    console.log("LocationPhotoGallery: keys ->", {
+      hasGoogleKey: !!(googleApiKey || GOOGLE_API_KEY),
+      hasUnsplashKey: !!UNSPLASH_KEY,
+    });
     if (!locationName) return;
     setLoading(true);
     setPhotos([]);
     setActiveIndex(0);
+    setErrorMessage(null);
 
-    fetchLocationPhotos(locationName, googleApiKey)
-      .then((p) => setPhotos(p))
-      .catch(() => setPhotos([]))
-      .finally(() => setLoading(false));
-  }, [locationName, googleApiKey]);
+    const run = async () => {
+      try {
+        setErrorMessage(null);
+        setDebugInfo(null);
+        const apiKey = googleApiKey || GOOGLE_API_KEY;
+
+        if (useRandomPhotos) {
+          // Fetch random / generic photos based on query (Unsplash, Wikipedia, fallbacks)
+          const p = await fetchRandomPhotos(locationName);
+          setPhotos(p);
+
+          // If we have a Google API key, try to resolve the place for map/debug info
+          if (apiKey) {
+            try {
+              const found = await GooglePlacesService.findPlace(locationName, apiKey);
+              if (found) {
+                setDebugInfo({
+                  placeId: found.placeId,
+                  name: found.name,
+                  lat: found.location?.lat,
+                  lng: found.location?.lng,
+                  urls: p.map((x) => x.uri),
+                });
+              }
+            } catch {
+              // ignore
+            }
+          }
+
+          if (!p || p.length === 0) {
+            setErrorMessage("No images found for that search.");
+          }
+
+          return;
+        }
+
+        // Default: place-specific photos via Google Places
+        if (!apiKey) {
+          // If Google key missing, gracefully fall back to random/Unsplash/Wikipedia images
+          console.warn("LocationPhotoGallery: Google API key missing — falling back to random images");
+          const p = await fetchRandomPhotos(locationName);
+          setPhotos(p);
+          if (!p || p.length === 0) {
+            setErrorMessage("No images found for that search.");
+          }
+          return;
+        }
+
+        const resp = await GooglePlacesService.getPhotosForLocation(locationName, apiKey, 8);
+        console.log("LocationPhotoGallery: resp", resp);
+        setDebugInfo(resp);
+        if (!resp || !resp.urls || resp.urls.length === 0) {
+          // Try random fallback if Google returned no photos
+          const fallback = await fetchRandomPhotos(locationName);
+          setPhotos(fallback);
+          if (!fallback || fallback.length === 0) {
+            setErrorMessage("No place-specific photos found. Check API key, Places API enablement, billing, or try a more specific place name.");
+          } else {
+            setErrorMessage("No place-specific photos found; showing fallback images.");
+          }
+          return;
+        }
+
+        const p2 = resp.urls.map((u: string, i: number) => ({ uri: u, label: resp.name || `Photo ${i + 1}`, category: "Overview" }));
+        setPhotos(p2);
+      } catch (err: any) {
+        console.error("LocationPhotoGallery: fetch error", err);
+        setErrorMessage(err?.message || "Failed to fetch photos");
+        setPhotos([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    run();
+  }, [locationName, googleApiKey, fetchTrigger]);
 
   const handleScroll = (e: any) => {
     const offset = e.nativeEvent.contentOffset.x;
     const index = Math.round(offset / (CARD_WIDTH + 16));
     setActiveIndex(index);
   };
+
+  const [showMap, setShowMap] = useState(false);
 
   return (
     <View style={[styles.container, style]}>
@@ -142,12 +287,63 @@ const LocationPhotoGallery: React.FC<Props> = ({
           <Ionicons name="image-outline" size={48} color="#d1d5db" />
           <Text style={styles.emptyText}>No photos available</Text>
           <Text style={styles.emptySubText}>Try searching a different destination</Text>
+          {errorMessage ? (
+            <View style={{ marginTop: 8, alignItems: "center" }}>
+              <Text style={{ color: "#6b7280", fontFamily: "outfit", fontSize: 13 }}>{errorMessage}</Text>
+              <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setLoading(true);
+                    setErrorMessage(null);
+                    setShowDebug(false);
+                    setFetchTrigger((s) => s + 1);
+                  }}
+                  style={{ paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "#6d28d9", borderRadius: 8 }}
+                >
+                  <Text style={{ color: "#fff", fontFamily: "outfit-medium" }}>Retry</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setShowDebug((s) => !s)}
+                  style={{ paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "#e5e7eb", borderRadius: 8 }}
+                >
+                  <Text style={{ color: "#374151", fontFamily: "outfit-medium" }}>{showDebug ? "Hide debug" : "Show debug"}</Text>
+                </TouchableOpacity>
+              </View>
+              {showDebug && debugInfo ? (
+                <View style={{ marginTop: 8, width: "100%", padding: 8, backgroundColor: "#fff", borderRadius: 8 }}>
+                  <Text style={{ fontFamily: "outfit", color: "#111" }}>placeId: {debugInfo.placeId}</Text>
+                  <Text style={{ fontFamily: "outfit", color: "#111" }}>name: {debugInfo.name}</Text>
+                  <Text style={{ fontFamily: "outfit", color: "#111" }}>lat: {debugInfo.lat}</Text>
+                  <Text style={{ fontFamily: "outfit", color: "#111" }}>lng: {debugInfo.lng}</Text>
+                  <Text style={{ fontFamily: "outfit", color: "#111", marginTop: 8, fontSize: 12 }}>photo URLs:</Text>
+                  {debugInfo.urls && debugInfo.urls.length ? (
+                    debugInfo.urls.map((u: string, i: number) => (
+                      <Text key={i} style={{ fontFamily: "outfit", color: "#444", fontSize: 12 }} numberOfLines={1}>
+                        {u}
+                      </Text>
+                    ))
+                  ) : (
+                    <Text style={{ fontFamily: "outfit", color: "#9ca3af" }}>none</Text>
+                  )}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       )}
 
       {/* Gallery */}
       {!loading && photos.length > 0 && (
         <>
+          <TouchableOpacity
+            style={{ alignSelf: "flex-end", marginBottom: 8, marginRight: 8 }}
+            onPress={() => setShowMap(true)}
+          >
+            <View style={{ backgroundColor: "#6d28d9", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}>
+              <Text style={{ color: "#fff", fontFamily: "outfit-medium" }}>View on Map</Text>
+            </View>
+          </TouchableOpacity>
           <ScrollView
             ref={scrollRef}
             horizontal
@@ -189,6 +385,26 @@ const LocationPhotoGallery: React.FC<Props> = ({
           ) : null}
         </>
       )}
+
+      <Modal visible={showMap} animationType="slide">
+        {debugInfo ? (
+          <PlaceMapView
+            lat={debugInfo.lat}
+            lng={debugInfo.lng}
+            name={debugInfo.name}
+            apiKey={googleApiKey || GOOGLE_API_KEY}
+            onClose={() => setShowMap(false)}
+          />
+        ) : (
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+            <ActivityIndicator />
+            <Text style={{ marginTop: 8 }}>No place info available</Text>
+            <TouchableOpacity onPress={() => setShowMap(false)} style={{ marginTop: 12 }}>
+              <Text style={{ color: "#6d28d9" }}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </Modal>
     </View>
   );
 };

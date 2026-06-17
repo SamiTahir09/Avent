@@ -40,6 +40,30 @@ const Discover = () => {
     const defaultFallback = "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?q=80&w=2071&auto=format&fit=crop";
     const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY;
 
+    // 1) Prefer Unsplash if key available
+    try {
+      const unsplash = await fetchUnsplashImage(placeName);
+      if (unsplash) return unsplash;
+    } catch (e) {
+      // ignore
+    }
+
+    // 2) Wikipedia fallback
+    try {
+      const cleanName = placeName.split(",")[0].trim().replace(/\s+/g, "_");
+      const wikiRes = await fetch(
+        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanName)}`
+      );
+      if (wikiRes.ok) {
+        const wikiData = await wikiRes.json();
+        const source = wikiData.originalimage?.source || wikiData.thumbnail?.source;
+        if (source) return source;
+      }
+    } catch (error) {
+      console.error("Error fetching Wikipedia fallback image:", error);
+    }
+
+    // 3) Google Places fallback (use only if available)
     if (apiKey) {
       try {
         const response = await fetch(
@@ -59,20 +83,6 @@ const Discover = () => {
       } catch (error) {
         console.error("Error fetching Google Place image:", error);
       }
-    }
-
-    try {
-      const cleanName = placeName.split(",")[0].trim().replace(/\s+/g, "_");
-      const wikiRes = await fetch(
-        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanName)}`
-      );
-      if (wikiRes.ok) {
-        const wikiData = await wikiRes.json();
-        const source = wikiData.originalimage?.source || wikiData.thumbnail?.source;
-        if (source) return source;
-      }
-    } catch (error) {
-      console.error("Error fetching Wikipedia fallback image:", error);
     }
 
     return defaultFallback;
@@ -224,6 +234,7 @@ const Discover = () => {
       <LocationPhotoGallery
         locationName={parsedTripPlan?.trip_plan?.location || ""}
         googleApiKey={process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}
+        useRandomPhotos={true}
         style={{ marginBottom: 20 }}
       />
 
@@ -277,25 +288,70 @@ const Discover = () => {
               Price: {parsedTripPlan.trip_plan.flight_details.price}
             </Text>
 
-            {/* ✅ REAL FLIGHT BOOKING — Emirates */}
-            <TouchableOpacity
-              onPress={() => handleBooking("flight")}
-              style={{
-                backgroundColor: "#8b5cf6",
-                borderRadius: 12,
-                paddingVertical: 14,
-                marginTop: 16,
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-              }}
-            >
-              <Ionicons name="airplane" size={20} color="#fff" />
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>
-                Book Flight on Emirates
-              </Text>
-            </TouchableOpacity>
+            {/* ✅ REAL FLIGHT BOOKING — Providers */}
+            <View style={{ marginTop: 16, gap: 10 }}>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <TouchableOpacity
+                  onPress={async () => {
+                    try {
+                      await Linking.openURL("https://www.onetravel.com/booknow/flights/destinations/country?country-code=PK&fpaffiliate=ot-googledesktop-global-destination&fpsub=Destination-Destinations_Intl_Exact_ATLAS_Global_SP&utm_term=airline%20pakistan&fpprice=&refid=&utm_campaign=&utm_source={google}&utm_medium={cpc}&device=c&campaignid=21754998913&adgroupid=168195431259&gad_source=1&gad_campaignid=21754998913&gbraid=0AAAAA-POqERIDPfqQgVXIBuyq7EIAXaA0&gclid=Cj0KCQjwi8nRBhDhARIsAHZf_paaBlEvdhTlukCBJpj3n1CV3Ma74kMt-1UZO4qtyMIkbHzVHGNb1v0aAlAvEALw_wcB");
+                    } catch (e) {
+                      Alert.alert("Error", "Unable to open OneTravel.");
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#1f2937",
+                    borderRadius: 12,
+                    paddingVertical: 14,
+                    alignItems: "center",
+                  }}
+                >
+                  <Ionicons name="airplane" size={18} color="#fff" />
+                  <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>OneTravel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={async () => {
+                    try {
+                      await Linking.openURL("https://www.skyscanner.pk/pk/en-gb/pkr/?adgroupid=146649109183&associateID=SEM_FLI_19465_00000&campaign_id=19965444611&gad_campaignid=19965444611&gad_source=1&gbraid=0AAAAAD3oWFgwSfdLRvX7nhbWhXqwetOF3&gclid=Cj0KCQjwi8nRBhDhARIsAHZf_pblybeMzyaU5MANTxVTYmE2mtC9g2b_1PMvJ3y8OA4EWp36OEXHbgUaAqtAEALw_wcB&gclsrc=aw.ds&keyword_id=kwd-18709060&previousCultureSource=URL&redirectedFrom=www.skyscanner.net&utm_campaign=PK-Flights-Search-EN-Generics&utm_medium=cpc&utm_source=google&utm_term=flight+booking");
+                    } catch (e) {
+                      Alert.alert("Error", "Unable to open Skyscanner.");
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#00a699",
+                    borderRadius: 12,
+                    paddingVertical: 14,
+                    alignItems: "center",
+                  }}
+                >
+                  <Ionicons name="airplane" size={18} color="#fff" />
+                  <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Skyscanner</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                onPress={async () => {
+                  try {
+                    await Linking.openURL("https://bookme.pk/pakistan-international-airlines");
+                  } catch (e) {
+                    Alert.alert("Error", "Unable to open PIA booking site.");
+                  }
+                }}
+                style={{
+                  backgroundColor: "#ef4444",
+                  borderRadius: 12,
+                  paddingVertical: 14,
+                  marginTop: 10,
+                  alignItems: "center",
+                }}
+              >
+                <Ionicons name="airplane" size={18} color="#fff" />
+                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16, marginTop: 6 }}>PIA</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </View>
@@ -317,39 +373,33 @@ const Discover = () => {
           <Text style={{ fontWeight: "700", marginBottom: 10, color: "#6d28d9" }}>🇵🇰 Pakistan</Text>
           <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
             <TouchableOpacity
-              onPress={() => handleBooking("bus", "redbus")}
-              style={{
-                flex: 1,
-                backgroundColor: "#dc2626",
-                borderRadius: 12,
-                paddingVertical: 14,
-                alignItems: "center",
+              onPress={async () => {
+                try {
+                  await Linking.openURL("https://daewoo.com.pk/");
+                } catch (e) {
+                  Alert.alert("Error", "Unable to open Daewoo website.");
+                }
               }}
-            >
-              <FontAwesome5 name="ticket-alt" size={18} color="#fff" />
-              <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>RedBus PK</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* International Bus Options */}
-          <Text style={{ fontWeight: "700", marginBottom: 10, color: "#6d28d9" }}>🌍 International</Text>
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <TouchableOpacity
-              onPress={() => handleBooking("bus", "flixbus")}
               style={{
                 flex: 1,
-                backgroundColor: "#16a34a",
+                backgroundColor: "#0b5efd",
                 borderRadius: 12,
                 paddingVertical: 14,
                 alignItems: "center",
               }}
             >
               <FontAwesome5 name="bus" size={18} color="#fff" />
-              <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>FlixBus</Text>
+              <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Daewoo</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => handleBooking("bus")}
+              onPress={async () => {
+                try {
+                  await Linking.openURL("https://faisalmovers.com/booking/");
+                } catch (e) {
+                  Alert.alert("Error", "Unable to open Faisal Movers booking page.");
+                }
+              }}
               style={{
                 flex: 1,
                 backgroundColor: "#0369a1",
@@ -358,8 +408,8 @@ const Discover = () => {
                 alignItems: "center",
               }}
             >
-              <Ionicons name="search" size={18} color="#fff" />
-              <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Search More</Text>
+              <FontAwesome5 name="ticket-alt" size={18} color="#fff" />
+              <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Faisal Movers</Text>
             </TouchableOpacity>
           </View>
         </View>

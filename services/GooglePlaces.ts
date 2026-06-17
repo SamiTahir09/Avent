@@ -47,7 +47,25 @@ export const findPlace = async (
     if (!res.ok) return null;
     const json = await res.json();
     const cand = json.candidates && json.candidates[0];
-    if (!cand) return null;
+    if (!cand) {
+      // fallback to textsearch which sometimes returns better results for cities
+      const tsUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
+        text
+      )}&key=${apiKey}`;
+      const tsRes = await fetch(tsUrl);
+      if (!tsRes.ok) return null;
+      const tsJson = await tsRes.json();
+      const r = tsJson.results && tsJson.results[0];
+      if (!r) return null;
+      return {
+        placeId: r.place_id,
+        location: {
+          lat: r.geometry?.location?.lat,
+          lng: r.geometry?.location?.lng,
+        },
+        name: r.name || r.formatted_address,
+      };
+    }
     return {
       placeId: cand.place_id,
       location: {
@@ -108,6 +126,74 @@ export const getPhotosForLocation = async (
     urls,
     name: found.name,
   };
+};
+
+export const getPlaceDetails = async (
+  placeId: string,
+  apiKey: string
+): Promise<{ placeId: string; name?: string; address?: string; lat?: number; lng?: number; phone?: string } | null> => {
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,geometry,formatted_phone_number&key=${apiKey}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const r = json.result;
+    if (!r) return null;
+    return {
+      placeId,
+      name: r.name,
+      address: r.formatted_address,
+      lat: r.geometry?.location?.lat,
+      lng: r.geometry?.location?.lng,
+      phone: r.formatted_phone_number,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const nearbyCacheKey = (lat: number, lng: number, type: string) => `nearby:${type}:${lat.toFixed(4)}:${lng.toFixed(4)}`;
+
+export const getNearbyPlaces = async (
+  lat: number,
+  lng: number,
+  apiKey: string,
+  type: string,
+  radius = 2000,
+  limit = 10
+): Promise<Array<{ placeId: string; name: string; address?: string; rating?: number; lat: number; lng: number; photo?: string; distanceMeters?: number }>> => {
+  try {
+    const cache = await getCached<any>(nearbyCacheKey(lat, lng, type));
+    if (cache) return cache;
+
+    const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=${radius}&type=${encodeURIComponent(type)}&key=${apiKey}`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const json = await res.json();
+    const results = (json.results || []).slice(0, limit);
+
+    const items = await Promise.all(
+      results.map(async (r: any) => {
+        const photoRef = r.photos && r.photos[0] && r.photos[0].photo_reference;
+        const photo = photoRef ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference=${photoRef}&key=${apiKey}` : undefined;
+        return {
+          placeId: r.place_id,
+          name: r.name,
+          address: r.vicinity || r.formatted_address,
+          rating: r.rating,
+          lat: r.geometry?.location?.lat,
+          lng: r.geometry?.location?.lng,
+          photo,
+          distanceMeters: null,
+        };
+      })
+    );
+
+    await setCached(nearbyCacheKey(lat, lng, type), items);
+    return items;
+  } catch {
+    return [];
+  }
 };
 
 export default {
