@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import moment from "moment";
 import CustomButton from "@/components/CustomButton";
 import { isDemoMode } from "@/config/env";
+import LocationPhotoGallery from "@/components/LocationPhotoGallery";
 
 const TripDetails = () => {
   const router = useRouter();
@@ -89,11 +90,23 @@ const TripDetails = () => {
           <Text className="text-lg font-outfit text-gray-600">
             Budget Type: {budget}
           </Text>
-          <View className="flex mt-10 items-center justify-center">
-            <Text className="text-lg font-outfit-medium text-gray-600">
-              Want to see flights, hotel recommendations and more plan details?
-            </Text>
-          </View>
+        </View>
+
+        {/* ── Real-World Photo Gallery ── */}
+        <LocationPhotoGallery
+          locationName={
+            parsedTripPlan?.trip_plan?.location ||
+            locationInfo?.name ||
+            ""
+          }
+          googleApiKey={process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}
+          style={{ marginTop: 28 }}
+        />
+
+        <View className="flex items-center justify-center mb-4">
+          <Text className="text-lg font-outfit-medium text-gray-600 text-center">
+            Want to see flights, hotel recommendations and more plan details?
+          </Text>
         </View>
 
         <CustomButton
@@ -104,7 +117,7 @@ const TripDetails = () => {
               params: { tripData, tripPlan },
             })
           }
-          className="mt-7"
+          className="mt-3"
         />
       </View>
     </ScrollView>

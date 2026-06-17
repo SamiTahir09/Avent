@@ -4,6 +4,7 @@ import { useLocalSearchParams } from "expo-router";
 import moment from "moment";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import CustomButton from "@/components/CustomButton";
+import LocationPhotoGallery from "@/components/LocationPhotoGallery";
 
 const DEFAULT_IMAGE_URL =
   "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?q=80&w=2071&auto=format&fit=crop";
@@ -143,7 +144,14 @@ const Discover = () => {
         paddingBottom: 20,
       }}
     >
-      <Text className="text-3xl font-outfit-bold mb-6">Trip Details</Text>
+      <Text className="text-3xl font-outfit-bold mb-4">Trip Details</Text>
+
+      {/* ── Real-World Photo Gallery ── */}
+      <LocationPhotoGallery
+        locationName={parsedTripPlan?.trip_plan?.location || ""}
+        googleApiKey={process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}
+        style={{ marginBottom: 20 }}
+      />
 
       {/* Trip Overview */}
       <View className="bg-purple-50 p-4 rounded-xl mb-6">
