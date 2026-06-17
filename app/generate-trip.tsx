@@ -10,6 +10,27 @@ import { auth, db } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
 import { demoSaveTrip } from "@/config/demoMode";
 
+const UNSPLASH_KEY = process.env.EXPO_PUBLIC_UNSPLASH_ACCESS_KEY || "";
+
+// Fetch a single photo from Unsplash for a given search query
+const fetchUnsplashImage = async (query: string): Promise<string> => {
+  if (!UNSPLASH_KEY) return "";
+  try {
+    const res = await fetch(
+      `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=3&orientation=landscape`,
+      { headers: { Authorization: `Client-ID ${UNSPLASH_KEY}` } }
+    );
+    if (!res.ok) return "";
+    const data = await res.json();
+    const results = data?.results || [];
+    if (!results.length) return "";
+    const pick = results[Math.floor(Math.random() * Math.min(results.length, 3))];
+    return pick?.urls?.regular || pick?.urls?.small || "";
+  } catch {
+    return "";
+  }
+};
+
 const GenerateTrip = () => {
   const { tripData } = useContext(CreateTripContext);
   const [loading, setLoading] = useState(false);
@@ -82,15 +103,8 @@ const GenerateTrip = () => {
         }
       }
 
-      let mainImageUrl = "";
-      const wikiRes = await fetch(
-        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cityName.replace(/\s+/g, "_"))}`
-      );
-      if (wikiRes.ok) {
-        const wikiData = await wikiRes.json();
-        mainImageUrl = wikiData.originalimage?.source || wikiData.thumbnail?.source || "";
-      }
-      
+      // Fetch main destination image from Unsplash
+      const mainImageUrl = await fetchUnsplashImage(`${cityName} city travel destination`);
       if (mainImageUrl) {
         const locIdx = finalTripData.findIndex((item: any) => item.locationInfo);
         if (locIdx !== -1) {
@@ -106,58 +120,43 @@ const GenerateTrip = () => {
 
       if (tripResponse?.trip_plan?.hotel?.options) {
         const hotelOptions = tripResponse.trip_plan.hotel.options;
+        // Fetch all hotel images in parallel
+        const hotelImgPromises = hotelOptions.map((hotel: any) =>
+          fetchUnsplashImage(`${hotel.name.split(",")[0].trim()} hotel ${cityName}`)
+        );
+        const hotelImgs = await Promise.all(hotelImgPromises);
         for (let i = 0; i < hotelOptions.length; i++) {
           const hotel = hotelOptions[i];
           hotel.geo_coordinates = {
             latitude: destLat + (i === 0 ? 0.005 : i === 1 ? -0.005 : 0.008),
             longitude: destLng + (i === 0 ? 0.005 : i === 1 ? -0.005 : -0.008),
           };
-
-          let hotelImg = "";
-          const hotelWikiRes = await fetch(
-            `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(hotel.name.split(",")[0].trim().replace(/\s+/g, "_"))}`
-          );
-          if (hotelWikiRes.ok) {
-            const hotelWikiData = await hotelWikiRes.json();
-            hotelImg = hotelWikiData.originalimage?.source || hotelWikiData.thumbnail?.source || "";
-          }
-          if (hotelImg) {
-            hotel.image_url = hotelImg;
-          } else {
-            hotel.image_url = i === 0 
+          hotel.image_url = hotelImgs[i] ||
+            (i === 0
               ? "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"
-              : "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=800";
-          }
+              : "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=800");
         }
       }
 
       if (tripResponse?.trip_plan?.places_to_visit) {
         const places = tripResponse.trip_plan.places_to_visit;
+        // Fetch all place images in parallel
+        const placeImgPromises = places.map((place: any) =>
+          fetchUnsplashImage(`${place.name.split(",")[0].trim()} ${cityName} travel attraction`)
+        );
+        const placeImgs = await Promise.all(placeImgPromises);
+        const fallbacks = [
+          "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800",
+          "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800",
+          "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800",
+        ];
         for (let i = 0; i < places.length; i++) {
           const place = places[i];
           place.geo_coordinates = {
             latitude: destLat + (i === 0 ? 0.002 : i === 1 ? -0.002 : i === 2 ? 0.004 : -0.004),
             longitude: destLng + (i === 0 ? -0.002 : i === 1 ? 0.002 : i === 2 ? -0.004 : 0.004),
           };
-
-          let placeImg = "";
-          const placeWikiRes = await fetch(
-            `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(place.name.split(",")[0].trim().replace(/\s+/g, "_"))}`
-          );
-          if (placeWikiRes.ok) {
-            const placeWikiData = await placeWikiRes.json();
-            placeImg = placeWikiData.originalimage?.source || placeWikiData.thumbnail?.source || "";
-          }
-          if (placeImg) {
-            place.image_url = placeImg;
-          } else {
-            const fallbacks = [
-              "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800",
-              "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800",
-              "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800"
-            ];
-            place.image_url = fallbacks[i % fallbacks.length];
-          }
+          place.image_url = placeImgs[i] || fallbacks[i % fallbacks.length];
         }
       }
     } catch (e) {

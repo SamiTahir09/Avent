@@ -15,6 +15,8 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_WIDTH = SCREEN_WIDTH * 0.72;
 const CARD_HEIGHT = 200;
 
+const UNSPLASH_KEY = process.env.EXPO_PUBLIC_UNSPLASH_ACCESS_KEY || "";
+
 // ──────────────────────────────────────────────
 //  Types
 // ──────────────────────────────────────────────
@@ -22,11 +24,13 @@ interface PhotoItem {
   uri: string;
   label: string;
   category: string;
+  photographer?: string;
+  photographerUrl?: string;
 }
 
 interface Props {
-  locationName: string;         // e.g. "Paris, France"
-  googleApiKey?: string;        // optional – used when available
+  locationName: string;
+  googleApiKey?: string;
   style?: object;
 }
 
@@ -34,86 +38,64 @@ interface Props {
 //  Category icon mapping
 // ──────────────────────────────────────────────
 const CATEGORY_ICONS: Record<string, any> = {
-  Overview:    "earth-outline",
-  Landmark:    "business-outline",
-  Attraction:  "telescope-outline",
-  Hotel:       "bed-outline",
-  Restaurant:  "restaurant-outline",
-  Nature:      "leaf-outline",
-  Street:      "map-outline",
+  Overview:   "earth-outline",
+  Landmark:   "business-outline",
+  Attraction: "telescope-outline",
+  Hotel:      "bed-outline",
+  Restaurant: "restaurant-outline",
+  Nature:     "leaf-outline",
+  Street:     "map-outline",
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  Overview:    "#6d28d9",
-  Landmark:    "#2563eb",
-  Attraction:  "#d97706",
-  Hotel:       "#059669",
-  Restaurant:  "#dc2626",
-  Nature:      "#16a34a",
-  Street:      "#0891b2",
+  Overview:   "#6d28d9",
+  Landmark:   "#2563eb",
+  Attraction: "#d97706",
+  Hotel:      "#059669",
+  Restaurant: "#dc2626",
+  Nature:     "#16a34a",
+  Street:     "#0891b2",
 };
 
 // ──────────────────────────────────────────────
-//  Wikipedia multi-section helper
+//  Unsplash search helper
 // ──────────────────────────────────────────────
-const fetchWikiImages = async (
-  term: string,
-  limit = 8
-): Promise<string[]> => {
+const fetchUnsplashPhoto = async (
+  query: string,
+  page = 1
+): Promise<{ uri: string; photographer: string; photographerUrl: string } | null> => {
+  if (!UNSPLASH_KEY) return null;
   try {
-    const url =
-      `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(
-        term
-      )}&prop=images&imlimit=${limit}&format=json&origin=*`;
-    const res = await fetch(url);
-    if (!res.ok) return [];
+    const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(
+      query
+    )}&per_page=5&page=${page}&orientation=landscape`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Client-ID ${UNSPLASH_KEY}` },
+    });
+    if (!res.ok) return null;
     const data = await res.json();
-    const pages = Object.values(data?.query?.pages || {}) as any[];
-    if (!pages.length) return [];
-    const rawImages: string[] = (pages[0]?.images || [])
-      .map((img: any) => img.title as string)
-      .filter(
-        (t: string) =>
-          /\.(jpg|jpeg|png|webp)$/i.test(t) &&
-          !/flag|logo|icon|seal|coa|coat|emblem|map|svg/i.test(t)
-      );
-
-    // Resolve file titles → actual URLs via imageinfo
-    const resolved: string[] = [];
-    for (const title of rawImages.slice(0, 6)) {
-      try {
-        const infoUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(
-          title
-        )}&prop=imageinfo&iiprop=url&format=json&origin=*`;
-        const infoRes = await fetch(infoUrl);
-        if (!infoRes.ok) continue;
-        const infoData = await infoRes.json();
-        const pg = Object.values(infoData?.query?.pages || {}) as any[];
-        const imgUrl = pg[0]?.imageinfo?.[0]?.url;
-        if (imgUrl) resolved.push(imgUrl);
-      } catch {
-        // skip
-      }
-    }
-    return resolved;
+    const results = data?.results || [];
+    if (!results.length) return null;
+    // Pick a varied result based on page
+    const pick = results[Math.floor(Math.random() * Math.min(results.length, 3))];
+    return {
+      uri: pick.urls?.regular || pick.urls?.small || "",
+      photographer: pick.user?.name || "",
+      photographerUrl: pick.user?.links?.html || "",
+    };
   } catch {
-    return [];
+    return null;
   }
 };
 
 // ──────────────────────────────────────────────
-//  Wikipedia summary image
+//  Wikipedia summary image (fallback)
 // ──────────────────────────────────────────────
 const fetchWikiSummaryImage = async (term: string): Promise<string> => {
   try {
-    const clean = term
-      .split(",")[0]
-      .trim()
-      .replace(/\s+/g, "_");
+    const clean = term.split(",")[0].trim().replace(/\s+/g, "_");
     const res = await fetch(
-      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(
-        clean
-      )}`
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(clean)}`
     );
     if (!res.ok) return "";
     const data = await res.json();
@@ -124,104 +106,63 @@ const fetchWikiSummaryImage = async (term: string): Promise<string> => {
 };
 
 // ──────────────────────────────────────────────
-//  Google Places Photos helper
-// ──────────────────────────────────────────────
-const fetchGooglePlaceImages = async (
-  query: string,
-  apiKey: string,
-  maxResults = 5
-): Promise<string[]> => {
-  try {
-    const searchRes = await fetch(
-      `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
-        query
-      )}&key=${apiKey}`
-    );
-    if (!searchRes.ok) return [];
-    const searchData = await searchRes.json();
-    const photos: string[] = [];
-    const places = (searchData.results || []).slice(0, maxResults);
-    for (const place of places) {
-      const ref = place.photos?.[0]?.photo_reference;
-      if (ref) {
-        photos.push(
-          `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${ref}&key=${apiKey}`
-        );
-      }
-    }
-    return photos;
-  } catch {
-    return [];
-  }
-};
-
-// ──────────────────────────────────────────────
-//  Curated Unsplash-style fallback URLs (no key)
-//  We use Unsplash Source (legacy, key-free)
-// ──────────────────────────────────────────────
-const buildUnsplashUrl = (keyword: string, seed: number) =>
-  `https://source.unsplash.com/800x600/?${encodeURIComponent(keyword)}&sig=${seed}`;
-
-// ──────────────────────────────────────────────
-//  Main fetcher – assembles photos with categories
+//  Main fetcher – uses Unsplash for every category
 // ──────────────────────────────────────────────
 const fetchLocationPhotos = async (
   locationName: string,
   googleApiKey?: string
 ): Promise<PhotoItem[]> => {
   const city = locationName.split(",")[0].trim();
+  const country = locationName.includes(",")
+    ? locationName.split(",").slice(1).join(",").trim()
+    : "";
+  const fullSearch = country ? `${city} ${country}` : city;
+
   const photos: PhotoItem[] = [];
 
-  // 1. Overview – Wikipedia summary image
-  const overviewImg = await fetchWikiSummaryImage(locationName);
-  if (overviewImg) {
-    photos.push({ uri: overviewImg, label: city, category: "Overview" });
-  }
-
-  // 2. If Google key present – fetch places by type
-  if (googleApiKey) {
-    const queries: { q: string; label: string; cat: string }[] = [
-      { q: `${city} famous landmark`,    label: "Landmark",    cat: "Landmark"   },
-      { q: `${city} tourist attraction`, label: "Attraction",  cat: "Attraction" },
-      { q: `${city} luxury hotel`,       label: "Hotel",       cat: "Hotel"      },
-      { q: `${city} restaurant`,         label: "Restaurant",  cat: "Restaurant" },
-      { q: `${city} nature park beach`,  label: "Nature",      cat: "Nature"     },
-      { q: `${city} city street view`,   label: "Street View", cat: "Street"     },
-    ];
-    for (const { q, label, cat } of queries) {
-      const imgs = await fetchGooglePlaceImages(q, googleApiKey, 1);
-      if (imgs[0]) {
-        photos.push({ uri: imgs[0], label, category: cat });
-      }
-    }
-    return photos;
-  }
-
-  // 3. Wikipedia article images (no key)
-  const wikiImgs = await fetchWikiImages(city, 10);
-  const cats = ["Landmark", "Attraction", "Nature", "Street", "Hotel", "Restaurant"];
-  wikiImgs.slice(0, 5).forEach((uri, i) => {
-    const cat = cats[i] || "Attraction";
-    photos.push({ uri, label: cat, category: cat });
-  });
-
-  // 4. Fill remaining slots with Unsplash Source (key-free, ~reliable)
-  const unsplashTerms: { term: string; label: string; cat: string }[] = [
-    { term: `${city} hotel`,       label: "Hotel",       cat: "Hotel"      },
-    { term: `${city} restaurant`,  label: "Restaurant",  cat: "Restaurant" },
-    { term: `${city} landmark`,    label: "Landmark",    cat: "Landmark"   },
-    { term: `${city} nature`,      label: "Nature",      cat: "Nature"     },
-    { term: `${city} street`,      label: "Street View", cat: "Street"     },
+  const categories: { query: string; label: string; cat: string }[] = [
+    { query: `${fullSearch} city overview`,     label: "Overview",    cat: "Overview"   },
+    { query: `${fullSearch} famous landmark`,   label: "Landmark",    cat: "Landmark"   },
+    { query: `${fullSearch} tourist attraction`,label: "Attraction",  cat: "Attraction" },
+    { query: `${fullSearch} luxury hotel`,      label: "Hotel",       cat: "Hotel"      },
+    { query: `${fullSearch} local food restaurant`, label: "Restaurant", cat: "Restaurant"},
+    { query: `${fullSearch} nature scenery`,    label: "Nature",      cat: "Nature"     },
+    { query: `${fullSearch} street architecture`,label: "Street View",cat: "Street"     },
   ];
-  // Only fill up to 6 total
-  const needed = Math.max(0, 6 - photos.length);
-  for (let i = 0; i < needed; i++) {
-    const t = unsplashTerms[i % unsplashTerms.length];
-    photos.push({
-      uri: buildUnsplashUrl(t.term, i + 42),
-      label: t.label,
-      category: t.cat,
-    });
+
+  // Fetch Unsplash photos concurrently for all categories
+  const results = await Promise.all(
+    categories.map((c, i) => fetchUnsplashPhoto(c.query, i + 1))
+  );
+
+  for (let i = 0; i < categories.length; i++) {
+    const r = results[i];
+    if (r && r.uri) {
+      photos.push({
+        uri: r.uri,
+        label: categories[i].label,
+        category: categories[i].cat,
+        photographer: r.photographer,
+        photographerUrl: r.photographerUrl,
+      });
+    }
+  }
+
+  // If Unsplash returned nothing (no key or quota), fall back to Wikipedia
+  if (photos.length === 0) {
+    const wikiImg = await fetchWikiSummaryImage(locationName);
+    if (wikiImg) {
+      photos.push({ uri: wikiImg, label: city, category: "Overview" });
+    }
+    // Generic travel fallbacks
+    const fallbacks = [
+      { uri: "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800", label: "Landmark",   category: "Landmark"   },
+      { uri: "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800", label: "Attraction", category: "Attraction" },
+      { uri: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800", label: "Hotel",      category: "Hotel"      },
+      { uri: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800", label: "Restaurant", category: "Restaurant" },
+      { uri: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800", label: "Nature",     category: "Nature"     },
+    ];
+    photos.push(...fallbacks);
   }
 
   return photos;
@@ -273,7 +214,7 @@ const LocationPhotoGallery: React.FC<Props> = ({
       {loading && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6d28d9" />
-          <Text style={styles.loadingText}>Fetching real-world photos…</Text>
+          <Text style={styles.loadingText}>Fetching real photos…</Text>
         </View>
       )}
 
@@ -282,9 +223,7 @@ const LocationPhotoGallery: React.FC<Props> = ({
         <View style={styles.emptyContainer}>
           <Ionicons name="image-outline" size={48} color="#d1d5db" />
           <Text style={styles.emptyText}>No photos available</Text>
-          <Text style={styles.emptySubText}>
-            Try searching a different destination
-          </Text>
+          <Text style={styles.emptySubText}>Try searching a different destination</Text>
         </View>
       )}
 
@@ -325,6 +264,11 @@ const LocationPhotoGallery: React.FC<Props> = ({
               />
             ))}
           </View>
+
+          {/* Unsplash attribution */}
+          {UNSPLASH_KEY ? (
+            <Text style={styles.attribution}>📷 Photos via Unsplash</Text>
+          ) : null}
         </>
       )}
     </View>
@@ -374,6 +318,15 @@ const PhotoCard: React.FC<{ photo: PhotoItem; index: number }> = ({
         <Ionicons name={iconName} size={12} color="#fff" />
         <Text style={styles.badgeText}>{photo.label}</Text>
       </View>
+
+      {/* Photographer credit */}
+      {!!photo.photographer && (
+        <View style={styles.creditBadge}>
+          <Text style={styles.creditText} numberOfLines={1}>
+            © {photo.photographer}
+          </Text>
+        </View>
+      )}
 
       {/* Index number */}
       <View style={styles.indexBadge}>
@@ -498,6 +451,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "outfit-medium",
   },
+  creditBadge: {
+    position: "absolute",
+    bottom: 10,
+    right: 10,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+    maxWidth: CARD_WIDTH * 0.45,
+  },
+  creditText: {
+    color: "#fff",
+    fontSize: 9,
+    fontFamily: "outfit",
+  },
   indexBadge: {
     position: "absolute",
     top: 10,
@@ -532,6 +500,13 @@ const styles = StyleSheet.create({
   dotInactive: {
     width: 6,
     backgroundColor: "#d1d5db",
+  },
+  attribution: {
+    textAlign: "center",
+    fontSize: 11,
+    fontFamily: "outfit",
+    color: "#9ca3af",
+    marginTop: 6,
   },
 });
 
