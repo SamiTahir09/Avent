@@ -113,12 +113,10 @@ const Discover = () => {
     const flight = parsedTripPlan?.trip_plan?.flight_details;
     const from = flight?.departure_city || "";
     const to = flight?.arrival_city || parsedTripPlan?.trip_plan?.location || "";
-    const date = flight?.departure_date || "";
 
     let url = "";
 
     if (type === "flight") {
-      // Google Flights — always works
       const fromEnc = encodeURIComponent(from);
       const toEnc = encodeURIComponent(to);
       url = `https://www.google.com/travel/flights?q=Flights+from+${fromEnc}+to+${toEnc}`;
@@ -127,28 +125,32 @@ const Discover = () => {
       const toEnc = encodeURIComponent(to);
 
       if (platform === "daewoo") {
-        url = `https://www.daewoobus.com.pk`;
+        // Daewoo Express official booking site
+        url = `https://daewooexpress.com/booking`;
       } else if (platform === "faisal") {
-        url = `https://www.faisalmoversbooking.com`;
+        // Faisal Movers official site
+        url = `https://faisalmovers.com`;
       } else if (platform === "flixbus") {
         url = `https://global.flixbus.com/bus-routes`;
       } else if (platform === "redbus") {
         url = `https://www.redbus.pk`;
       } else {
-        url = `https://www.google.com/search?q=bus+booking+${fromEnc}+to+${toEnc}`;
+        url = `https://www.google.com/search?q=online+bus+booking+${fromEnc}+to+${toEnc}`;
       }
     }
 
     try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-      } else {
-        Alert.alert("Error", "Cannot open this link on your device");
-      }
+      // ✅ Directly open URL — canOpenURL fails on Android for HTTPS links
+      await Linking.openURL(url);
     } catch (error) {
-      console.error(error);
-      Alert.alert("Error", "Something went wrong while opening booking");
+      console.error("Booking URL error:", error);
+      // Fallback: open Google search
+      const fallback = `https://www.google.com/search?q=online+bus+booking+${encodeURIComponent(from)}+to+${encodeURIComponent(to)}`;
+      try {
+        await Linking.openURL(fallback);
+      } catch (e) {
+        Alert.alert("خرابی", "لنک نہیں کھل سکا۔ براہ کرم دوبارہ کوشش کریں۔");
+      }
     }
   };
 
