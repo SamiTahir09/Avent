@@ -24,7 +24,36 @@ const SearchPlace = () => {
   const { setTripData } = useContext(CreateTripContext);
   const [demoPlace, setDemoPlace] = useState("");
 
-  const saveLocation = (name: string) => {
+  const saveLocation = async (name: string) => {
+    let lat = 28.6139;
+    let lng = 77.209;
+    let imageUrl = "";
+
+    try {
+      const cleanName = name.split(",")[0].trim();
+      const geoRes = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanName)}&format=json&limit=1`,
+        { headers: { "User-Agent": "AventTravelApp/1.0" } }
+      );
+      if (geoRes.ok) {
+        const geoData = await geoRes.json();
+        if (geoData && geoData.length > 0) {
+          lat = parseFloat(geoData[0].lat);
+          lng = parseFloat(geoData[0].lon);
+        }
+      }
+
+      const wikiRes = await fetch(
+        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanName.replace(/\s+/g, "_"))}`
+      );
+      if (wikiRes.ok) {
+        const wikiData = await wikiRes.json();
+        imageUrl = wikiData.originalimage?.source || wikiData.thumbnail?.source || "";
+      }
+    } catch (error) {
+      console.error("Error geocoding/fetching image:", error);
+    }
+
     setTripData((prev: any[]) => {
       const newData = prev.filter((item) => !item.locationInfo);
       return [
@@ -32,9 +61,10 @@ const SearchPlace = () => {
         {
           locationInfo: {
             name,
-            coordinates: { lat: 28.6139, lng: 77.209 },
+            coordinates: { lat, lng },
             url: "",
             photoRef: null,
+            imageUrl: imageUrl || null,
           },
         },
       ];

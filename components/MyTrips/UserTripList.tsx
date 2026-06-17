@@ -37,26 +37,54 @@ const UserTripList = ({ userTrips }: { userTrips: any[] }) => {
 
   const isPastTrip = moment().isAfter(moment(endDate));
 
+  // Stateful Wikipedia image loader
+  const [imageUri, setImageUri] = React.useState<string>(locationInfo?.imageUrl || "");
+
+  React.useEffect(() => {
+    if (locationInfo?.imageUrl) {
+      setImageUri(locationInfo.imageUrl);
+      return;
+    }
+    if (isDemoMode() || !locationInfo?.photoRef) {
+      const fetchWiki = async () => {
+        try {
+          const placeName = sortedTrips[0]?.tripPlan?.trip_plan?.location || locationInfo?.name || "";
+          if (placeName) {
+            const cleanName = placeName.split(",")[0].trim().replace(/\s+/g, "_");
+            const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanName)}`);
+            if (res.ok) {
+              const data = await res.json();
+              const source = data.originalimage?.source || data.thumbnail?.source;
+              if (source) {
+                setImageUri(source);
+                return;
+              }
+            }
+          }
+        } catch (e) {
+          console.error(e);
+        }
+        setImageUri("https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800");
+      };
+      fetchWiki();
+    }
+  }, [locationInfo?.imageUrl, locationInfo?.photoRef, sortedTrips[0]?.tripPlan?.trip_plan?.location, locationInfo?.name]);
+
+  const tripImage = imageUri || (
+    locationInfo?.photoRef
+      ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${locationInfo.photoRef}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`
+      : "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800"
+  );
+
   return (
     <View className="mb-16">
       <View>
-        {(() => {
-          const placeName = sortedTrips[0]?.tripPlan?.trip_plan?.location || locationInfo?.name || "travel";
-          const cleanPlaceName = encodeURIComponent(placeName.split(",")[0].trim());
-          const tripImage =
-            isDemoMode() || !locationInfo?.photoRef
-              ? `https://loremflickr.com/800/600/${cleanPlaceName},travel/all`
-              : `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${locationInfo.photoRef}&key=${process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}`;
-
-          return (
-            <Image
-              source={{ uri: tripImage }}
-              className={`w-full h-60 rounded-2xl mt-5 ${
-                isPastTrip ? "grayscale" : ""
-              }`}
-            />
-          );
-        })()}
+        <Image
+          source={{ uri: tripImage }}
+          className={`w-full h-60 rounded-2xl mt-5 ${
+            isPastTrip ? "grayscale" : ""
+          }`}
+        />
         <View className="mt-3">
           <Text
             className={`font-outfit-medium text-xl ${

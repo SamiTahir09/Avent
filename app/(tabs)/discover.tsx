@@ -14,31 +14,45 @@ const Discover = () => {
   const [parsedTripPlan, setParsedTripPlan] = useState<any>(null);
 
   const fetchPlaceImage = async (placeName: string) => {
-    const cleanName = encodeURIComponent((placeName || "").split(",")[0].trim());
-    const fallbackUrl = `https://loremflickr.com/800/600/${cleanName || "hotel"},travel/all`;
+    const defaultFallback = "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?q=80&w=2071&auto=format&fit=crop";
     const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY;
-    if (!apiKey) {
-      return fallbackUrl;
+    
+    if (apiKey) {
+      try {
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
+            placeName
+          )}&key=${apiKey}`
+        );
+
+        const data = await response.json();
+        const place = data.results?.[0];
+        if (place) {
+          const photoRef = place.photos?.[0]?.photo_reference;
+          if (photoRef) {
+            return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photoRef}&key=${apiKey}`;
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching Google Place image:", error);
+      }
     }
+
     try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
-          placeName
-        )}&key=${apiKey}`
+      const cleanName = placeName.split(",")[0].trim().replace(/\s+/g, "_");
+      const wikiRes = await fetch(
+        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanName)}`
       );
-
-      const data = await response.json();
-      const place = data.results?.[0];
-      if (!place) return fallbackUrl;
-
-      const photoRef = place.photos?.[0]?.photo_reference;
-      if (!photoRef) return fallbackUrl;
-
-      return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photoRef}&key=${apiKey}`;
+      if (wikiRes.ok) {
+        const wikiData = await wikiRes.json();
+        const source = wikiData.originalimage?.source || wikiData.thumbnail?.source;
+        if (source) return source;
+      }
     } catch (error) {
-      console.error("Error fetching place image:", error);
-      return fallbackUrl;
+      console.error("Error fetching Wikipedia fallback image:", error);
     }
+
+    return defaultFallback;
   };
 
   useEffect(() => {

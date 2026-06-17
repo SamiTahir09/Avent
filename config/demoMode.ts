@@ -119,7 +119,8 @@ export function buildDemoTripPlan(
             name: `Grand ${cityName} Hotel`,
             address: `Main Street, ${location}`,
             price: budget === "Luxury" ? "₹12,000 per night" : "₹4,500 per night",
-            image_url: `https://loremflickr.com/800/600/${cleanCity},hotel/all`,
+            image_url:
+              "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",
             geo_coordinates: { latitude: 28.6139, longitude: 77.209 },
             rating: 4.5,
             description: "A comfortable stay in the heart of the city.",
@@ -128,7 +129,8 @@ export function buildDemoTripPlan(
             name: `${cityName} Heritage Inn`,
             address: `Old Town, ${location}`,
             price: budget === "Luxury" ? "₹9,500 per night" : "₹3,200 per night",
-            image_url: `https://loremflickr.com/800/600/${cleanCity},resort/all`,
+            image_url:
+              "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=800",
             geo_coordinates: { latitude: 28.62, longitude: 77.21 },
             rating: 4.2,
             description: "Charming hotel with local character.",
@@ -139,7 +141,8 @@ export function buildDemoTripPlan(
         {
           name: "City Center",
           details: "Explore the main attractions and local culture.",
-          image_url: `https://loremflickr.com/800/600/${cleanCity},city/all`,
+          image_url:
+            "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800",
           geo_coordinates: { latitude: 28.61, longitude: 77.2 },
           ticket_price: "Free",
           time_to_travel: "10 minutes from hotel",
@@ -147,7 +150,8 @@ export function buildDemoTripPlan(
         {
           name: "Historic Landmark",
           details: "A must-visit heritage site in the area.",
-          image_url: `https://loremflickr.com/800/600/${cleanCity},landmark/all`,
+          image_url:
+            "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800",
           geo_coordinates: { latitude: 28.615, longitude: 77.205 },
           ticket_price: "₹100",
           time_to_travel: "20 minutes from hotel",
@@ -155,7 +159,8 @@ export function buildDemoTripPlan(
         {
           name: "Local Market",
           details: "Shop for souvenirs and try street food.",
-          image_url: `https://loremflickr.com/800/600/${cleanCity},market/all`,
+          image_url:
+            "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800",
           geo_coordinates: { latitude: 28.618, longitude: 77.215 },
           ticket_price: "Free",
           time_to_travel: "15 minutes from hotel",

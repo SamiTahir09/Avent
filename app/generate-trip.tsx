@@ -48,6 +48,122 @@ const GenerateTrip = () => {
 
     const result = await chatSession.sendMessage(FINAL_PROMPT);
     const tripResponse = JSON.parse(result.response.text());
+
+    // Enrich coordinates and images for the trip plan
+    const finalTripData = [...tripData];
+    try {
+      const location = locationInfo?.name || tripResponse?.trip_plan?.location || "";
+      const cityName = location.split(",")[0].trim();
+      
+      let destLat = locationInfo?.coordinates?.lat || 28.6139;
+      let destLng = locationInfo?.coordinates?.lng || 77.209;
+      
+      if (isDemoMode() && (!locationInfo?.coordinates || locationInfo.coordinates.lat === 28.6139)) {
+        const geoRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cityName)}&format=json&limit=1`,
+          { headers: { "User-Agent": "AventTravelApp/1.0" } }
+        );
+        if (geoRes.ok) {
+          const geoData = await geoRes.json();
+          if (geoData && geoData.length > 0) {
+            destLat = parseFloat(geoData[0].lat);
+            destLng = parseFloat(geoData[0].lon);
+            const locIdx = finalTripData.findIndex((item: any) => item.locationInfo);
+            if (locIdx !== -1) {
+              finalTripData[locIdx] = {
+                ...finalTripData[locIdx],
+                locationInfo: {
+                  ...finalTripData[locIdx].locationInfo,
+                  coordinates: { lat: destLat, lng: destLng }
+                }
+              };
+            }
+          }
+        }
+      }
+
+      let mainImageUrl = "";
+      const wikiRes = await fetch(
+        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cityName.replace(/\s+/g, "_"))}`
+      );
+      if (wikiRes.ok) {
+        const wikiData = await wikiRes.json();
+        mainImageUrl = wikiData.originalimage?.source || wikiData.thumbnail?.source || "";
+      }
+      
+      if (mainImageUrl) {
+        const locIdx = finalTripData.findIndex((item: any) => item.locationInfo);
+        if (locIdx !== -1) {
+          finalTripData[locIdx] = {
+            ...finalTripData[locIdx],
+            locationInfo: {
+              ...finalTripData[locIdx].locationInfo,
+              imageUrl: mainImageUrl
+            }
+          };
+        }
+      }
+
+      if (tripResponse?.trip_plan?.hotel?.options) {
+        const hotelOptions = tripResponse.trip_plan.hotel.options;
+        for (let i = 0; i < hotelOptions.length; i++) {
+          const hotel = hotelOptions[i];
+          hotel.geo_coordinates = {
+            latitude: destLat + (i === 0 ? 0.005 : i === 1 ? -0.005 : 0.008),
+            longitude: destLng + (i === 0 ? 0.005 : i === 1 ? -0.005 : -0.008),
+          };
+
+          let hotelImg = "";
+          const hotelWikiRes = await fetch(
+            `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(hotel.name.split(",")[0].trim().replace(/\s+/g, "_"))}`
+          );
+          if (hotelWikiRes.ok) {
+            const hotelWikiData = await hotelWikiRes.json();
+            hotelImg = hotelWikiData.originalimage?.source || hotelWikiData.thumbnail?.source || "";
+          }
+          if (hotelImg) {
+            hotel.image_url = hotelImg;
+          } else {
+            hotel.image_url = i === 0 
+              ? "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800"
+              : "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=800";
+          }
+        }
+      }
+
+      if (tripResponse?.trip_plan?.places_to_visit) {
+        const places = tripResponse.trip_plan.places_to_visit;
+        for (let i = 0; i < places.length; i++) {
+          const place = places[i];
+          place.geo_coordinates = {
+            latitude: destLat + (i === 0 ? 0.002 : i === 1 ? -0.002 : i === 2 ? 0.004 : -0.004),
+            longitude: destLng + (i === 0 ? -0.002 : i === 1 ? 0.002 : i === 2 ? -0.004 : 0.004),
+          };
+
+          let placeImg = "";
+          const placeWikiRes = await fetch(
+            `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(place.name.split(",")[0].trim().replace(/\s+/g, "_"))}`
+          );
+          if (placeWikiRes.ok) {
+            const placeWikiData = await placeWikiRes.json();
+            placeImg = placeWikiData.originalimage?.source || placeWikiData.thumbnail?.source || "";
+          }
+          if (placeImg) {
+            place.image_url = placeImg;
+          } else {
+            const fallbacks = [
+              "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800",
+              "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800",
+              "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800"
+            ];
+            place.image_url = fallbacks[i % fallbacks.length];
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error resolving assets during trip generation:", e);
+    }
+
     setLoading(false);
 
     const docId = Date.now().toString();
@@ -55,7 +171,7 @@ const GenerateTrip = () => {
     const tripRecord = {
       userEmail: user?.email,
       tripPlan: tripResponse,
-      tripData: JSON.stringify(tripData),
+      tripData: JSON.stringify(finalTripData),
       docId: docId,
     };
 
