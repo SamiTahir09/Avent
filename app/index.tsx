@@ -8,7 +8,7 @@ export default function HomeScreen() {
   const [user, setUser] = useState(auth.currentUser);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user: any) => {
       setUser(user);
       setIsLoading(false);
     });
