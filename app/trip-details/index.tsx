@@ -1,4 +1,4 @@
-import { View, Text, Image, ScrollView, Alert, ActivityIndicator } from "react-native";
+import { View, Text, Image, FlatList, Alert, ActivityIndicator } from "react-native";
 import React from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import moment from "moment";
@@ -209,105 +209,112 @@ const TripDetails = () => {
   );
 
   return (
-    <ScrollView className="flex-1 bg-white">
-      <Image
-        source={{ uri: tripImage }}
-        className="w-full h-72"
-      />
+    <FlatList
+      data={[{}]}
+      keyExtractor={() => "trip-details"}
+      renderItem={() => null}
+      ListHeaderComponent={() => (
+        <>
+          <Image source={{ uri: tripImage }} className="w-full h-72" />
 
-      <View className="p-6">
-        <Text className="text-3xl font-outfit-bold">
-          {parsedTripPlan?.trip_plan?.location}
-        </Text>
+          <View className="p-6">
+            <Text className="text-3xl font-outfit-bold">
+              {parsedTripPlan?.trip_plan?.location}
+            </Text>
 
-        <View className="mt-4 space-y-2">
-          <Text className="text-lg font-outfit text-gray-600">
-            {moment(startDate).format("MMM D")} -{" "}
-            {moment(endDate).format("MMM D, YYYY")}
-          </Text>
-          <Text className="text-lg font-outfit text-gray-600">
-            Total Number of Days: {totalNumberOfDays}
-          </Text>
-          <Text className="text-lg font-outfit text-gray-600">
-            {travelers?.type} ({travelers?.count})
-          </Text>
-          <Text className="text-lg font-outfit text-gray-600">
-            Budget Type: {budget}
-          </Text>
-        </View>
+            <View className="mt-4 space-y-2">
+              <Text className="text-lg font-outfit text-gray-600">
+                {moment(startDate).format("MMM D")} -{" "}
+                {moment(endDate).format("MMM D, YYYY")}
+              </Text>
+              <Text className="text-lg font-outfit text-gray-600">
+                Total Number of Days: {totalNumberOfDays}
+              </Text>
+              <Text className="text-lg font-outfit text-gray-600">
+                {travelers?.type} ({travelers?.count})
+              </Text>
+              <Text className="text-lg font-outfit text-gray-600">
+                Budget Type: {budget}
+              </Text>
+            </View>
 
-        {/* ── Real-World Photo Gallery ── */}
-        <CustomButton title="Discover Weather" onPress={handleDiscoverWeather} className="mt-3" />
-        {loadingWeather ? (
-          <View className="mt-3">
-            <ActivityIndicator />
-          </View>
-        ) : null}
+            {/* ── Real-World Photo Gallery ── */}
+            <CustomButton title="Discover Weather" onPress={handleDiscoverWeather} className="mt-3" />
+            {loadingWeather ? (
+              <View className="mt-3">
+                <ActivityIndicator />
+              </View>
+            ) : null}
 
-        <WeatherAdvice coords={destCoords} placeName={parsedTripPlan?.trip_plan?.location || parsedTripData?.location} days={3} />
-        <AIPackingSuggestions coords={destCoords} days={3} />
+            <WeatherAdvice coords={destCoords} placeName={parsedTripPlan?.trip_plan?.location || parsedTripData?.location} days={3} />
+            <AIPackingSuggestions coords={destCoords} days={3} />
 
-        {showWeather ? (
-          <View className="bg-white p-4 rounded-xl mt-4 border border-gray-100">
-            {weatherInfo ? (
-              <View>
-                <View className="flex-row items-center">
-                  {weatherInfo.icon ? (
-                    <Image source={{ uri: weatherInfo.icon }} style={{ width: 56, height: 56, borderRadius: 8 }} />
-                  ) : null}
-                  <View className="ml-3">
-                    <Text className="text-xl font-outfit-bold">{Math.round(weatherInfo.tempC)}°C • {weatherInfo.condition}</Text>
-                    <Text className="text-sm text-gray-600">Feels like {Math.round(weatherInfo.feelsLikeC)}°C</Text>
-                  </View>
-                </View>
-
-                {recommendations && recommendations.length ? (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4">
-                    {recommendations.map((r) => (
-                      <View key={r.label} className="mr-3 items-center" style={{ width: 100 }}>
-                        <Image source={{ uri: r.image || DEFAULT_IMAGE_URL }} style={{ width: 100, height: 100, borderRadius: 8 }} />
-                        <Text className="text-sm mt-2 text-center">{r.label}</Text>
+            {showWeather ? (
+              <View className="bg-white p-4 rounded-xl mt-4 border border-gray-100">
+                {weatherInfo ? (
+                  <View>
+                    <View className="flex-row items-center">
+                      {weatherInfo.icon ? (
+                        <Image source={{ uri: weatherInfo.icon }} style={{ width: 56, height: 56, borderRadius: 8 }} />
+                      ) : null}
+                      <View className="ml-3">
+                        <Text className="text-xl font-outfit-bold">{Math.round(weatherInfo.tempC)}°C • {weatherInfo.condition}</Text>
+                        <Text className="text-sm text-gray-600">Feels like {Math.round(weatherInfo.feelsLikeC)}°C</Text>
                       </View>
-                    ))}
-                  </ScrollView>
+                    </View>
+
+                    {recommendations && recommendations.length ? (
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4">
+                        {recommendations.map((r) => (
+                          <View key={r.label} className="mr-3 items-center" style={{ width: 100 }}>
+                            <Image source={{ uri: r.image || DEFAULT_IMAGE_URL }} style={{ width: 100, height: 100, borderRadius: 8 }} />
+                            <Text className="text-sm mt-2 text-center">{r.label}</Text>
+                          </View>
+                        ))}
+                      </ScrollView>
+                    ) : (
+                      <Text className="text-sm text-gray-600 mt-3">No recommendations available.</Text>
+                    )}
+                  </View>
                 ) : (
-                  <Text className="text-sm text-gray-600 mt-3">No recommendations available.</Text>
+                  <Text className="text-sm text-gray-600">Weather information not available.</Text>
                 )}
               </View>
-            ) : (
-              <Text className="text-sm text-gray-600">Weather information not available.</Text>
-            )}
+            ) : null}
+
+            <LocationPhotoGallery
+              locationName={
+                parsedTripPlan?.trip_plan?.location ||
+                locationInfo?.name ||
+                ""
+              }
+              googleApiKey={process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}
+              style={{ marginTop: 28 }}
+            />
+
+            <View className="flex items-center justify-center mb-4">
+              <Text className="text-lg font-outfit-medium text-gray-600 text-center">
+                Want to see flights, hotel recommendations and more plan details?
+              </Text>
+            </View>
+
+            <CustomButton
+              title="Discover Location"
+              onPress={() =>
+                router.push({
+                  pathname: "/(tabs)/discover",
+                  params: { tripData, tripPlan },
+                })
+              }
+              className="mt-3"
+            />
           </View>
-        ) : null}
-
-        <LocationPhotoGallery
-          locationName={
-            parsedTripPlan?.trip_plan?.location ||
-            locationInfo?.name ||
-            ""
-          }
-          googleApiKey={process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}
-          style={{ marginTop: 28 }}
-        />
-
-        <View className="flex items-center justify-center mb-4">
-          <Text className="text-lg font-outfit-medium text-gray-600 text-center">
-            Want to see flights, hotel recommendations and more plan details?
-          </Text>
-        </View>
-
-        <CustomButton
-          title="Discover Location"
-          onPress={() =>
-            router.push({
-              pathname: "/(tabs)/discover",
-              params: { tripData, tripPlan },
-            })
-          }
-          className="mt-3"
-        />
-      </View>
-    </ScrollView>
+        </>
+      )}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ flexGrow: 1 }}
+      className="flex-1 bg-white"
+    />
   );
 };
 
