@@ -7,6 +7,7 @@ import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import moment from "moment";
 import CustomButton from "@/components/CustomButton";
 import WeatherService, { WeatherInfo } from "@/services/WeatherService";
+import WeatherAdvice from "@/components/WeatherAdvice";
 
 const ReviewTrip = () => {
   const router = useRouter();
@@ -153,24 +154,27 @@ const ReviewTrip = () => {
                 </TouchableOpacity>
               </View>
             ) : weatherData ? (
-              <View className="bg-white p-4 rounded-xl mb-4 shadow-sm border border-neutral-100 flex-row items-center">
-                {weatherData.icon ? (
-                  <Image source={{ uri: weatherData.icon }} style={{ width: 64, height: 64 }} />
-                ) : (
-                  <View className="w-16 h-16 bg-neutral-100 rounded-full" />
-                )}
-                <View className="ml-4 flex-1">
-                  <Text className="text-gray-500 text-sm font-outfit">Weather</Text>
-                  <Text className="text-lg font-outfit-bold">{Math.round(weatherData.tempC)}°C — {weatherData.condition}</Text>
-                  <View className="flex-row mt-2">
-                    <Text className="text-sm text-gray-500 mr-3">Feels like {Math.round(weatherData.feelsLikeC)}°C</Text>
-                    <Text className="text-sm text-gray-500 mr-3">Humidity {weatherData.humidity}%</Text>
-                    <Text className="text-sm text-gray-500">Wind {Math.round(weatherData.windKph)} km/h</Text>
+              <View>
+                <WeatherAdvice weather={weatherData} placeName={locationInfo?.name} />
+                <View className="bg-white p-4 rounded-xl mb-4 shadow-sm border border-neutral-100 flex-row items-center">
+                  {weatherData.icon ? (
+                    <Image source={{ uri: weatherData.icon }} style={{ width: 64, height: 64 }} />
+                  ) : (
+                    <View className="w-16 h-16 bg-neutral-100 rounded-full" />
+                  )}
+                  <View className="ml-4 flex-1">
+                    <Text className="text-gray-500 text-sm font-outfit">Weather</Text>
+                    <Text className="text-lg font-outfit-bold">{Math.round(weatherData.tempC)}°C — {weatherData.condition}</Text>
+                    <View className="flex-row mt-2">
+                      <Text className="text-sm text-gray-500 mr-3">Feels like {Math.round(weatherData.feelsLikeC)}°C</Text>
+                      <Text className="text-sm text-gray-500 mr-3">Humidity {weatherData.humidity}%</Text>
+                      <Text className="text-sm text-gray-500">Wind {Math.round(weatherData.windKph)} km/h</Text>
+                    </View>
                   </View>
-                </View>
-                <View className="ml-4 items-end">
-                  <Text className="text-sm text-gray-500">Chance of rain</Text>
-                  <Text className="text-lg font-outfit-bold">{weatherData.chanceOfRain !== null ? `${weatherData.chanceOfRain}%` : "N/A"}</Text>
+                  <View className="ml-4 items-end">
+                    <Text className="text-sm text-gray-500">Chance of rain</Text>
+                    <Text className="text-lg font-outfit-bold">{weatherData.chanceOfRain !== null ? `${weatherData.chanceOfRain}%` : "N/A"}</Text>
+                  </View>
                 </View>
               </View>
             ) : (
