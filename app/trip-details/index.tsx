@@ -1,10 +1,14 @@
-import { View, Text, Image, ScrollView } from "react-native";
+import { View, Text, Image, ScrollView, Alert, ActivityIndicator } from "react-native";
 import React from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import moment from "moment";
 import CustomButton from "@/components/CustomButton";
 import { isDemoMode } from "@/config/env";
 import LocationPhotoGallery from "@/components/LocationPhotoGallery";
+import AIPackingSuggestions from "@/components/AIPackingSuggestions";
+import WeatherAdvice from "@/components/WeatherAdvice";
+import WeatherService from "@/services/WeatherService";
+import type { WeatherInfo } from "@/services/WeatherService";
 
 const TripDetails = () => {
   const router = useRouter();
@@ -27,6 +31,112 @@ const TripDetails = () => {
   const budget = parsedTripData?.find((item: any) => item.budget)?.budget?.type;
 
   const [imageUri, setImageUri] = React.useState<string>(locationInfo?.imageUrl || "");
+
+  // Weather-related state (moved from Discover page)
+  const [showWeather, setShowWeather] = React.useState(false);
+  const [weatherInfo, setWeatherInfo] = React.useState<WeatherInfo | null>(null);
+  const [loadingWeather, setLoadingWeather] = React.useState(false);
+  const [recommendations, setRecommendations] = React.useState<Array<{ label: string; image: string }>>([]);
+
+  const DEFAULT_IMAGE_URL =
+    "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?q=80&w=2071&auto=format&fit=crop";
+
+  const fetchUnsplashImage = async (query: string) => {
+    const UNSPLASH_KEY = process.env.EXPO_PUBLIC_UNSPLASH_ACCESS_KEY || "";
+    if (!UNSPLASH_KEY) return "";
+    try {
+      const res = await fetch(
+        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=3&orientation=landscape`,
+        { headers: { Authorization: `Client-ID ${UNSPLASH_KEY}` } }
+      );
+      if (!res.ok) return "";
+      const data = await res.json();
+      const results = data?.results || [];
+      if (!results.length) return "";
+      const pick = results[Math.floor(Math.random() * Math.min(results.length, 3))];
+      return pick?.urls?.regular || pick?.urls?.small || "";
+    } catch (e) {
+      return "";
+    }
+  };
+
+  const destCoords =
+    locationInfo?.coordinates ||
+    parsedTripPlan?.trip_plan?.hotel?.options?.[0]?.geo_coordinates ||
+    parsedTripPlan?.trip_plan?.places_to_visit?.[0]?.geo_coordinates ||
+    null;
+
+  const generatePackingListForUI = (w: WeatherInfo) => {
+    const items = new Set<string>();
+    const cond = (w.condition || "").toLowerCase();
+    const feels = typeof w.feelsLikeC === "number" && !Number.isNaN(w.feelsLikeC) ? w.feelsLikeC : w.tempC;
+    const rain = typeof w.chanceOfRain === "number" ? w.chanceOfRain : (w.forecast && w.forecast[0]?.chanceOfRain) ?? 0;
+
+    if (cond.includes("snow") || (w.forecast && w.forecast.some(fd => (fd.tempMinC !== null && fd.tempMinC <= 2) && (fd.chanceOfRain && fd.chanceOfRain > 30)))) {
+      items.add("Thermal Wear");
+      items.add("Heavy Jacket");
+      items.add("Boots");
+    }
+
+    if (rain >= 50 || cond.includes("rain") || cond.includes("drizzle") || cond.includes("shower")) {
+      items.add("Umbrella");
+      items.add("Raincoat");
+    }
+
+    if (typeof feels === "number" && feels <= 10) {
+      items.add("Jacket");
+      items.add("Sweater");
+    }
+
+    if (typeof feels === "number" && feels >= 25) {
+      items.add("T-Shirts");
+      items.add("Shorts");
+      items.add("Sunglasses");
+    }
+
+    if (items.size === 0) {
+      items.add("Light Jacket");
+      items.add("Layers (T-Shirt + Sweater)");
+    }
+
+    items.add("Comfortable Shoes");
+
+    return Array.from(items);
+  };
+
+  const handleDiscoverWeather = async () => {
+    if (!destCoords) {
+      Alert.alert("No coordinates", "No destination coordinates available to fetch weather.");
+      return;
+    }
+
+    const lat = (destCoords as any).latitude ?? (destCoords as any).lat;
+    const lon = (destCoords as any).longitude ?? (destCoords as any).lng;
+    if (typeof lat !== "number" || typeof lon !== "number") {
+      Alert.alert("Invalid coordinates", "Destination coordinates are not numeric.");
+      return;
+    }
+
+    setLoadingWeather(true);
+    setShowWeather(true);
+    try {
+      const w = await WeatherService.getWeatherByCoords(Number(lat), Number(lon), 3);
+      setWeatherInfo(w);
+
+      const labels = generatePackingListForUI(w).slice(0, 6);
+      const imgPromises = labels.map(l => fetchUnsplashImage(l));
+      const imgs = await Promise.all(imgPromises);
+      const recs = labels.map((label, i) => ({ label, image: imgs[i] || DEFAULT_IMAGE_URL }));
+      setRecommendations(recs);
+    } catch (e: any) {
+      console.error("Discover weather error:", e);
+      Alert.alert("Weather error", e?.message || "Unable to fetch weather.");
+      setWeatherInfo(null);
+      setRecommendations([]);
+    } finally {
+      setLoadingWeather(false);
+    }
+  };
 
   React.useEffect(() => {
     if (locationInfo?.imageUrl) {
@@ -127,6 +237,49 @@ const TripDetails = () => {
         </View>
 
         {/* ── Real-World Photo Gallery ── */}
+        <CustomButton title="Discover Weather" onPress={handleDiscoverWeather} className="mt-3" />
+        {loadingWeather ? (
+          <View className="mt-3">
+            <ActivityIndicator />
+          </View>
+        ) : null}
+
+        <WeatherAdvice coords={destCoords} placeName={parsedTripPlan?.trip_plan?.location || parsedTripData?.location} days={3} />
+        <AIPackingSuggestions coords={destCoords} days={3} />
+
+        {showWeather ? (
+          <View className="bg-white p-4 rounded-xl mt-4 border border-gray-100">
+            {weatherInfo ? (
+              <View>
+                <View className="flex-row items-center">
+                  {weatherInfo.icon ? (
+                    <Image source={{ uri: weatherInfo.icon }} style={{ width: 56, height: 56, borderRadius: 8 }} />
+                  ) : null}
+                  <View className="ml-3">
+                    <Text className="text-xl font-outfit-bold">{Math.round(weatherInfo.tempC)}°C • {weatherInfo.condition}</Text>
+                    <Text className="text-sm text-gray-600">Feels like {Math.round(weatherInfo.feelsLikeC)}°C</Text>
+                  </View>
+                </View>
+
+                {recommendations && recommendations.length ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4">
+                    {recommendations.map((r) => (
+                      <View key={r.label} className="mr-3 items-center" style={{ width: 100 }}>
+                        <Image source={{ uri: r.image || DEFAULT_IMAGE_URL }} style={{ width: 100, height: 100, borderRadius: 8 }} />
+                        <Text className="text-sm mt-2 text-center">{r.label}</Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <Text className="text-sm text-gray-600 mt-3">No recommendations available.</Text>
+                )}
+              </View>
+            ) : (
+              <Text className="text-sm text-gray-600">Weather information not available.</Text>
+            )}
+          </View>
+        ) : null}
+
         <LocationPhotoGallery
           locationName={
             parsedTripPlan?.trip_plan?.location ||
