@@ -24,6 +24,8 @@ const SignIn = () => {
         return;
       }
 
+      setIsLoading(true);
+
       if (isDemoMode()) {
         await demoSignIn(form.email, form.password);
         router.replace("/(tabs)/mytrip");
@@ -59,6 +61,8 @@ const SignIn = () => {
           alert("Error signing in: " + error.message);
       }
       console.error(error);
+    } finally {
+      setIsLoading(false);
     }
   };
 

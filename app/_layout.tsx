@@ -33,19 +33,6 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const [tripData, setTripData] = useState<any[]>([]);
 
-  const updateTripData = (newData: any) => {
-    setTripData((prevData) => {
-      // Find the key of the new data (locationInfo, travelers, dates, or budget)
-      const dataKey = Object.keys(newData)[0];
-
-      // Remove any existing data of the same type
-      const filteredData = prevData.filter((item) => !item[dataKey]);
-
-      // Add the new data
-      return [...filteredData, newData];
-    });
-  };
-
   const colorScheme = useColorScheme();
   const [loaded] = useFonts({
     outfit: require("@/assets/fonts/Outfit-Regular.ttf"),

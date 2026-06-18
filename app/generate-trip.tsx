@@ -68,7 +68,15 @@ const GenerateTrip = () => {
       .replace("{budget}", budget?.type || "");
 
     const result = await chatSession.sendMessage(FINAL_PROMPT);
-    const tripResponse = JSON.parse(result.response.text());
+    let tripResponse: any;
+    try {
+      tripResponse = JSON.parse(result.response.text());
+    } catch {
+      console.error("AI response was not valid JSON — aborting trip generation");
+      setLoading(false);
+      router.replace("/(tabs)/mytrip");
+      return;
+    }
 
     // Enrich coordinates and images for the trip plan
     const finalTripData = [...tripData];
@@ -163,8 +171,6 @@ const GenerateTrip = () => {
       console.error("Error resolving assets during trip generation:", e);
     }
 
-    setLoading(false);
-
     const docId = Date.now().toString();
 
     const tripRecord = {
@@ -174,13 +180,19 @@ const GenerateTrip = () => {
       docId: docId,
     };
 
-    if (isDemoMode()) {
-      await demoSaveTrip(tripRecord);
-    } else {
-      await setDoc(doc(db, "UserTrips", docId), tripRecord);
+    try {
+      if (isDemoMode()) {
+        await demoSaveTrip(tripRecord);
+      } else {
+        await setDoc(doc(db, "UserTrips", docId), tripRecord);
+      }
+    } catch (saveErr) {
+      console.error("Error saving trip:", saveErr);
+    } finally {
+      setLoading(false);
     }
 
-    router.push("/mytrip");
+    router.replace("/(tabs)/mytrip");
   };
 
   return (

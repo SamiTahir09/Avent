@@ -31,22 +31,33 @@ const MyTrip = () => {
     setUserTrips([]);
 
     if (isDemoMode()) {
-      const trips = await demoGetTrips(user?.email || "");
-      setUserTrips(trips);
-      setLoading(false);
+      try {
+        const trips = await demoGetTrips(user?.email || "");
+        setUserTrips(trips);
+      } catch (error) {
+        console.error("Error fetching demo trips:", error);
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
-    const q = query(
-      collection(db, "UserTrips"),
-      where("userEmail", "==", user?.email)
-    );
-    const querySnapshot = await getDocs(q);
-
-    querySnapshot.forEach((doc) => {
-      setUserTrips((prev) => [...prev, doc.data()]);
-    });
-    setLoading(false);
+    try {
+      const q = query(
+        collection(db, "UserTrips"),
+        where("userEmail", "==", user?.email)
+      );
+      const querySnapshot = await getDocs(q);
+      const trips: any[] = [];
+      querySnapshot.forEach((doc) => {
+        trips.push(doc.data());
+      });
+      setUserTrips(trips);
+    } catch (error) {
+      console.error("Error fetching trips from Firestore:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

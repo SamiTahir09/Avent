@@ -58,10 +58,20 @@ export const demoAuth = {
 
 export async function demoSignIn(email: string, _password: string) {
   const now = new Date().toISOString();
+
+  // Reuse existing UID if same email is already stored
+  const raw = await AsyncStorage.getItem(USER_KEY);
+  const existing: DemoUser | null = raw ? JSON.parse(raw) : null;
+  const existingUid =
+    existing && existing.email === email ? existing.uid : undefined;
+
   currentUser = {
     email,
-    uid: `demo-${Date.now()}`,
-    metadata: { creationTime: now, lastSignInTime: now },
+    uid: existingUid ?? `demo-${Date.now()}`,
+    metadata: {
+      creationTime: existing?.metadata?.creationTime ?? now,
+      lastSignInTime: now,
+    },
   };
   await AsyncStorage.setItem(USER_KEY, JSON.stringify(currentUser));
   notifyAuthListeners();

@@ -1,8 +1,6 @@
 import { View, Text } from "react-native";
 import React from "react";
 import CustomButton from "./CustomButton";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
 import { demoSignIn } from "@/config/demoMode";
 import { router } from "expo-router";
@@ -16,17 +14,10 @@ const DummyLogin = () => {
         return;
       }
 
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        "testuser@gmail.com",
-        "testuser123"
-      );
-
-      const user = userCredential.user;
-      console.log("Logged in with dummy account:", user.email);
-
-      // Navigate to the main app
-      router.replace("/(tabs)/mytrip");
+      // Demo login is only available in Demo Mode.
+      // To enable it in production, set up a test user in Firebase
+      // and store credentials securely in environment variables.
+      alert("Demo login is only available in Demo Mode.");
     } catch (error: any) {
       console.error("Error signing in with dummy account:", error);
       alert("Error signing in with dummy account. Please try again.");

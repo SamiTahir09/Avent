@@ -25,6 +25,8 @@ const SignUp = () => {
         return;
       }
 
+      setIsLoading(true);
+
       if (isDemoMode()) {
         await demoSignUp(form.email, form.password);
         router.replace("/(tabs)/mytrip");
@@ -57,6 +59,8 @@ const SignUp = () => {
           alert("Error creating account: " + error.message);
       }
       console.error(error);
+    } finally {
+      setIsLoading(false);
     }
   };
 

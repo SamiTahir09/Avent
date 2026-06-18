@@ -14,16 +14,20 @@ const UserTripList = ({ userTrips }: { userTrips: any[] }) => {
 
   // Sort trips by start date
   const sortedTrips = [...userTrips].sort((a, b) => {
-    const aData = JSON.parse(a.tripData);
-    const bData = JSON.parse(b.tripData);
-
-    const aStartDate = aData.find((item: any) => item.dates)?.dates?.startDate;
-    const bStartDate = bData.find((item: any) => item.dates)?.dates?.startDate;
-
-    return moment(aStartDate).valueOf() - moment(bStartDate).valueOf();
+    try {
+      const aData = a.tripData ? JSON.parse(a.tripData) : [];
+      const bData = b.tripData ? JSON.parse(b.tripData) : [];
+      const aStartDate = aData.find((item: any) => item.dates)?.dates?.startDate;
+      const bStartDate = bData.find((item: any) => item.dates)?.dates?.startDate;
+      return moment(aStartDate).valueOf() - moment(bStartDate).valueOf();
+    } catch {
+      return 0;
+    }
   });
 
-  const LatestTrip = JSON.parse(sortedTrips[0]?.tripData);
+  const LatestTrip = sortedTrips[0]?.tripData
+    ? JSON.parse(sortedTrips[0].tripData)
+    : [];
 
   const locationInfo = LatestTrip?.find(
     (item: any) => item.locationInfo
@@ -120,7 +124,7 @@ const UserTripList = ({ userTrips }: { userTrips: any[] }) => {
         <View className="h-0.5 bg-gray-200 mt-4 mb-2" />
 
         {sortedTrips?.slice(1).map((trip, idx) => (
-          <UserTripCard trip={trip} key={idx} />
+          <UserTripCard trip={trip} key={trip.docId || idx} />
         ))}
       </View>
     </View>

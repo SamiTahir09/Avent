@@ -40,6 +40,12 @@ const Discover = () => {
   const [parsedTripData, setParsedTripData] = useState<any>(null);
   const [parsedTripPlan, setParsedTripPlan] = useState<any>(null);
 
+  // ── All hooks must be declared before any early return (Rules of Hooks) ──
+  const [showWeather, setShowWeather] = useState(false);
+  const [weatherInfo, setWeatherInfo] = useState<WeatherInfo | null>(null);
+  const [loadingWeather, setLoadingWeather] = useState(false);
+  const [recommendations, setRecommendations] = useState<Array<{ label: string; image: string }>>([]);
+
   const fetchPlaceImage = async (placeName: string) => {
     const defaultFallback = "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?q=80&w=2071&auto=format&fit=crop";
     const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY;
@@ -257,12 +263,6 @@ const Discover = () => {
     parsedTripPlan?.trip_plan?.hotel?.options?.[0]?.geo_coordinates ||
     parsedTripPlan?.trip_plan?.places_to_visit?.[0]?.geo_coordinates ||
     null;
-
-  // Local state for manual weather discovery
-  const [showWeather, setShowWeather] = useState(false);
-  const [weatherInfo, setWeatherInfo] = useState<WeatherInfo | null>(null);
-  const [loadingWeather, setLoadingWeather] = useState(false);
-  const [recommendations, setRecommendations] = useState<Array<{ label: string; image: string }>>([]);
 
   const generatePackingListForUI = (w: WeatherInfo) => {
     const items = new Set<string>();
