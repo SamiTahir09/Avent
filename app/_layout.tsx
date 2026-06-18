@@ -24,6 +24,7 @@ import { useEffect, useState } from "react";
 import "react-native-reanimated";
 import { useColorScheme } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import "../global.css";
 import "react-native-get-random-values";
 import { CreateTripContext } from "@/context/CreateTripContext";
@@ -51,7 +52,7 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <SafeAreaProvider>
       <CreateTripContext.Provider value={{ tripData, setTripData }}>
         <StatusBar style="dark" />
         <Stack screenOptions={{ headerShown: false }}>
@@ -62,6 +63,6 @@ export default function RootLayout() {
           <Stack.Screen name="generate-trip" />
         </Stack>
       </CreateTripContext.Provider>
-    </>
+    </SafeAreaProvider>
   );
 }

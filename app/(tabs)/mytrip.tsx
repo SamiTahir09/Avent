@@ -5,7 +5,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from "react-native";
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import StartNewTripCard from "@/components/MyTrips/StartNewTripCard";
@@ -15,12 +15,14 @@ import { isDemoMode } from "@/config/env";
 import { demoGetTrips } from "@/config/demoMode";
 import UserTripList from "@/components/MyTrips/UserTripList";
 import { useRouter } from "expo-router";
+import { CreateTripContext } from "@/context/CreateTripContext";
 
 const MyTrip = () => {
   const [userTrips, setUserTrips] = useState<any[]>([]);
   const user = auth.currentUser;
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { setTripData } = useContext(CreateTripContext);
 
   useEffect(() => {
     user && getMyTrips();
@@ -70,7 +72,10 @@ const MyTrip = () => {
           My Trips
         </Text>
         <TouchableOpacity
-          onPress={() => router.push("/create-trip/search-place")}
+          onPress={() => {
+            setTripData([]);
+            router.push("/create-trip/search-place");
+          }}
         >
           <Ionicons name="add-circle" size={40} color="#8b5cf6" />
         </TouchableOpacity>

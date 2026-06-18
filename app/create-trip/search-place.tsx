@@ -10,6 +10,7 @@ import { GooglePlacesAutocomplete } from "react-native-google-places-autocomplet
 import { CreateTripContext } from "@/context/CreateTripContext";
 import { isDemoMode } from "@/config/env";
 import CustomButton from "@/components/CustomButton";
+import { parseCoordinates } from "@/utils/coordinates";
 
 const DEMO_PLACES = [
   "Paris, France",
@@ -137,6 +138,7 @@ const SearchPlace = () => {
           fetchDetails={true}
           enablePoweredByContainer={false}
           onPress={(data, details = null) => {
+            const coords = parseCoordinates(details?.geometry?.location);
             setTripData((prev: any[]) => {
               const newData = prev.filter((item) => !item.locationInfo);
               return [
@@ -144,7 +146,7 @@ const SearchPlace = () => {
                 {
                   locationInfo: {
                     name: data.description,
-                    coordinates: details?.geometry.location,
+                    coordinates: coords ?? undefined,
                     url: details?.url,
                     // @ts-ignore
                     photoRef: details?.photos?.[0]?.photo_reference,
