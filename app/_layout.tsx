@@ -1,17 +1,3 @@
-// Polyfill setImmediate for web compatibility (e.g., for react-native-swiper)
-if (typeof setImmediate === "undefined") {
-  const setImmediatePolyfill = (fn: (...args: any[]) => void, ...args: any[]) => setTimeout(fn, 0, ...args);
-  const clearImmediatePolyfill = (id: any) => clearTimeout(id);
-  if (typeof window !== "undefined") {
-    (window as any).setImmediate = setImmediatePolyfill;
-    (window as any).clearImmediate = clearImmediatePolyfill;
-  }
-  if (typeof global !== "undefined") {
-    (global as any).setImmediate = setImmediatePolyfill;
-    (global as any).clearImmediate = clearImmediatePolyfill;
-  }
-}
-
 import {
   DarkTheme,
   DefaultTheme,
