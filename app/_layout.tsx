@@ -61,6 +61,9 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="create-trip" />
           <Stack.Screen name="generate-trip" />
+          <Stack.Screen name="weather-details" />
+          <Stack.Screen name="weather-outfit" />
+          <Stack.Screen name="trip-details" />
         </Stack>
       </CreateTripContext.Provider>
     </SafeAreaProvider>

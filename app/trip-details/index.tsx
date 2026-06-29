@@ -1,4 +1,4 @@
-import { View, Text, Image, FlatList, Alert, ActivityIndicator } from "react-native";
+import { View, Text, Image, FlatList, Alert } from "react-native";
 import React from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -8,8 +8,6 @@ import { isDemoMode } from "@/config/env";
 import LocationPhotoGallery from "@/components/LocationPhotoGallery";
 import AIPackingSuggestions from "@/components/AIPackingSuggestions";
 import WeatherAdvice from "@/components/WeatherAdvice";
-import WeatherService from "@/services/WeatherService";
-import type { WeatherInfo } from "@/services/WeatherService";
 
 const TripDetails = () => {
   const router = useRouter();
@@ -32,12 +30,6 @@ const TripDetails = () => {
   const budget = parsedTripData?.find((item: any) => item.budget)?.budget?.type;
 
   const [imageUri, setImageUri] = React.useState<string>(locationInfo?.imageUrl || "");
-
-  // Weather-related state (moved from Discover page)
-  const [showWeather, setShowWeather] = React.useState(false);
-  const [weatherInfo, setWeatherInfo] = React.useState<WeatherInfo | null>(null);
-  const [loadingWeather, setLoadingWeather] = React.useState(false);
-  const [recommendations, setRecommendations] = React.useState<Array<{ label: string; image: string }>>([]);
 
   const DEFAULT_IMAGE_URL =
     "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?q=80&w=2071&auto=format&fit=crop";
@@ -105,7 +97,7 @@ const TripDetails = () => {
     return Array.from(items);
   };
 
-  const handleDiscoverWeather = async () => {
+  const handleDiscoverWeather = () => {
     if (!destCoords) {
       Alert.alert("No coordinates", "No destination coordinates available to fetch weather.");
       return;
@@ -118,25 +110,12 @@ const TripDetails = () => {
       return;
     }
 
-    setLoadingWeather(true);
-    setShowWeather(true);
-    try {
-      const w = await WeatherService.getWeatherByCoords(Number(lat), Number(lon), 3);
-      setWeatherInfo(w);
+    const place = parsedTripPlan?.trip_plan?.location || locationInfo?.name || "Destination";
 
-      const labels = generatePackingListForUI(w).slice(0, 6);
-      const imgPromises = labels.map(l => fetchUnsplashImage(l));
-      const imgs = await Promise.all(imgPromises);
-      const recs = labels.map((label, i) => ({ label, image: imgs[i] || DEFAULT_IMAGE_URL }));
-      setRecommendations(recs);
-    } catch (e: any) {
-      console.error("Discover weather error:", e);
-      Alert.alert("Weather error", e?.message || "Unable to fetch weather.");
-      setWeatherInfo(null);
-      setRecommendations([]);
-    } finally {
-      setLoadingWeather(false);
-    }
+    router.push({
+      pathname: "/weather-outfit",
+      params: { lat: String(lat), lon: String(lon), placeName: place },
+    });
   };
 
   React.useEffect(() => {
@@ -241,48 +220,10 @@ const TripDetails = () => {
               </View>
 
               {/* ── Real-World Photo Gallery ── */}
-              <CustomButton title="Discover Weather" onPress={handleDiscoverWeather} className="mt-3" />
-              {loadingWeather ? (
-                <View className="mt-3">
-                  <ActivityIndicator />
-                </View>
-              ) : null}
+              <CustomButton title="🌤️ Discover Weather & Outfits" onPress={handleDiscoverWeather} className="mt-3" />
 
               <WeatherAdvice coords={destCoords} placeName={parsedTripPlan?.trip_plan?.location || parsedTripData?.location} days={3} />
               <AIPackingSuggestions coords={destCoords} days={3} />
-
-              {showWeather ? (
-                <View className="bg-white p-4 rounded-xl mt-4 border border-gray-100">
-                  {weatherInfo ? (
-                    <View>
-                      <View className="flex-row items-center">
-                        {weatherInfo.icon ? (
-                          <Image source={{ uri: weatherInfo.icon }} style={{ width: 56, height: 56, borderRadius: 8 }} />
-                        ) : null}
-                        <View className="ml-3">
-                          <Text className="text-xl font-outfit-bold">{Math.round(weatherInfo.tempC)}°C • {weatherInfo.condition}</Text>
-                          <Text className="text-sm text-gray-600">Feels like {Math.round(weatherInfo.feelsLikeC)}°C</Text>
-                        </View>
-                      </View>
-
-                      {recommendations && recommendations.length ? (
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4">
-                          {recommendations.map((r) => (
-                            <View key={r.label} className="mr-3 items-center" style={{ width: 100 }}>
-                              <Image source={{ uri: r.image || DEFAULT_IMAGE_URL }} style={{ width: 100, height: 100, borderRadius: 8 }} />
-                              <Text className="text-sm mt-2 text-center">{r.label}</Text>
-                            </View>
-                          ))}
-                        </ScrollView>
-                      ) : (
-                        <Text className="text-sm text-gray-600 mt-3">No recommendations available.</Text>
-                      )}
-                    </View>
-                  ) : (
-                    <Text className="text-sm text-gray-600">Weather information not available.</Text>
-                  )}
-                </View>
-              ) : null}
 
               <LocationPhotoGallery
                 locationName={

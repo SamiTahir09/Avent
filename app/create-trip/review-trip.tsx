@@ -329,6 +329,36 @@ const ReviewTrip = () => {
             </View>
           ) : null}
 
+          {locationInfo ? (
+            <TouchableOpacity
+              onPress={() =>
+                router.push({
+                  pathname: "/weather-details",
+                  params: { tripData: JSON.stringify(safeTripData) },
+                } as any)
+              }
+              style={[
+                cardStyle.card,
+                {
+                  backgroundColor: "#faf5ff",
+                  borderColor: "#e9d5ff",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: 14,
+                  marginBottom: 16,
+                  gap: 8,
+                },
+              ]}
+            >
+              <Ionicons name="partly-sunny-outline" size={20} color="#8b5cf6" />
+              <Text style={{ color: "#7c3aed", fontFamily: "outfit-bold", fontSize: 15 }}>
+                View Full Weather Details
+              </Text>
+              <Ionicons name="chevron-forward" size={18} color="#8b5cf6" />
+            </TouchableOpacity>
+          ) : null}
+
           {renderReviewItem(
             "Travelers",
             `${travelers?.type || "Not selected"} (${travelers?.count || "0"})`,
