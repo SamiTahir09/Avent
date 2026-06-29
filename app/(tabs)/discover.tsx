@@ -1,6 +1,7 @@
 import { View, Text, ScrollView, Image, Linking, Alert, TouchableOpacity, ActivityIndicator } from "react-native";
 import React, { useEffect, useState } from "react";
-import { useLocalSearchParams } from "expo-router";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import moment from "moment";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import CustomButton from "@/components/CustomButton";
@@ -33,6 +34,8 @@ const fetchUnsplashImage = async (query: string) => {
 
 const Discover = () => {
   const { tripData, tripPlan } = useLocalSearchParams();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [parsedTripData, setParsedTripData] = useState<any>(null);
   const [parsedTripPlan, setParsedTripPlan] = useState<any>(null);
 
@@ -252,336 +255,344 @@ const Discover = () => {
 
 
   return (
-    <ScrollView
-      className="flex-1 bg-white"
-      contentContainerStyle={{
-        padding: 24,
-        paddingTop: 80,
-        paddingBottom: 20,
-      }}
-    >
-      <Text className="text-3xl font-outfit-bold mb-4">Trip Details</Text>
-
-      {/* ── Real-World Photo Gallery ── */}
-      <LocationPhotoGallery
-        locationName={parsedTripPlan?.trip_plan?.location || ""}
-        googleApiKey={process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}
-        useRandomPhotos={true}
-        style={{ marginBottom: 20 }}
-      />
-
-      {/* Trip Overview */}
-      <View className="bg-purple-50 p-4 rounded-xl mb-6">
-        <Text className="font-outfit-bold text-lg mb-2">Trip Overview</Text>
-        <Text className="font-outfit text-gray-600">
-          Duration: {parsedTripPlan.trip_plan.duration}
-        </Text>
-        <Text className="font-outfit text-gray-600">
-          Budget: {parsedTripPlan.trip_plan.budget}
-        </Text>
-        
+    <SafeAreaView className="flex-1 bg-white" edges={["top"]}>
+      {/* Back Button Header */}
+      <View className="px-6 pb-0 flex-row items-center" style={{ paddingTop: insets.top }}>
+        <TouchableOpacity onPress={() => router.back()} className="mr-3">
+          <Ionicons name="arrow-back" size={24} color="#000" />
+        </TouchableOpacity>
+        <Text className="text-xl font-outfit-bold">Location Details</Text>
       </View>
 
-      {/* Flight Details */}
-      <View className="mb-8">
-        <Text className="text-2xl font-outfit-bold mb-4">Flight Details</Text>
-        <View className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-          <View className="flex-row justify-between items-center mb-4">
-            <View>
-              <Text className="font-outfit-bold text-lg">
-                {parsedTripPlan.trip_plan.flight_details.departure_city}
-              </Text>
-              <Text className="font-outfit text-gray-600">
-                {parsedTripPlan.trip_plan.flight_details.departure_date}{" "}
-                {parsedTripPlan.trip_plan.flight_details.departure_time}
-              </Text>
-            </View>
+      <ScrollView
+        className="flex-1 bg-white"
+        contentContainerStyle={{
+          padding: 24,
+          paddingTop: 20,
+          paddingBottom: 20,
+        }}
+      >
+        {/* ── Real-World Photo Gallery ── */}
+        <LocationPhotoGallery
+          locationName={parsedTripPlan?.trip_plan?.location || ""}
+          googleApiKey={process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}
+          useRandomPhotos={true}
+          style={{ marginBottom: 20 }}
+        />
 
-            <Ionicons name="airplane" size={24} color="#8b5cf6" />
-
-            <View>
-              <Text className="font-outfit-bold text-lg">
-                {parsedTripPlan.trip_plan.flight_details.arrival_city}
-              </Text>
-              <Text className="font-outfit text-gray-600">
-                {parsedTripPlan.trip_plan.flight_details.arrival_date}{" "}
-                {parsedTripPlan.trip_plan.flight_details.arrival_time}
-              </Text>
-            </View>
-          </View>
-
-          <View className="border-t border-gray-200 pt-4">
-            <Text className="font-outfit text-gray-600">
-              Airline: {parsedTripPlan.trip_plan.flight_details.airline}
-            </Text>
-            <Text className="font-outfit text-gray-600">
-              Flight: {parsedTripPlan.trip_plan.flight_details.flight_number}
-            </Text>
-            <Text className="font-outfit text-gray-600">
-              Price: {parsedTripPlan.trip_plan.flight_details.price}
-            </Text>
-
-            {/* ✅ REAL FLIGHT BOOKING — Providers */}
-            <View style={{ marginTop: 16, gap: 10 }}>
-              <View style={{ flexDirection: "row", gap: 10 }}>
-                <TouchableOpacity
-                  onPress={async () => {
-                    try {
-                      await Linking.openURL("https://www.onetravel.com/booknow/flights/destinations/country?country-code=PK&fpaffiliate=ot-googledesktop-global-destination&fpsub=Destination-Destinations_Intl_Exact_ATLAS_Global_SP&utm_term=airline%20pakistan&fpprice=&refid=&utm_campaign=&utm_source={google}&utm_medium={cpc}&device=c&campaignid=21754998913&adgroupid=168195431259&gad_source=1&gad_campaignid=21754998913&gbraid=0AAAAA-POqERIDPfqQgVXIBuyq7EIAXaA0&gclid=Cj0KCQjwi8nRBhDhARIsAHZf_paaBlEvdhTlukCBJpj3n1CV3Ma74kMt-1UZO4qtyMIkbHzVHGNb1v0aAlAvEALw_wcB");
-                    } catch (e) {
-                      Alert.alert("Error", "Unable to open OneTravel.");
-                    }
-                  }}
-                  style={{
-                    flex: 1,
-                    backgroundColor: "#1f2937",
-                    borderRadius: 12,
-                    paddingVertical: 14,
-                    alignItems: "center",
-                  }}
-                >
-                  <Ionicons name="airplane" size={18} color="#fff" />
-                  <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>OneTravel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={async () => {
-                    try {
-                      await Linking.openURL("https://www.skyscanner.pk/pk/en-gb/pkr/?adgroupid=146649109183&associateID=SEM_FLI_19465_00000&campaign_id=19965444611&gad_campaignid=19965444611&gad_source=1&gbraid=0AAAAAD3oWFgwSfdLRvX7nhbWhXqwetOF3&gclid=Cj0KCQjwi8nRBhDhARIsAHZf_pblybeMzyaU5MANTxVTYmE2mtC9g2b_1PMvJ3y8OA4EWp36OEXHbgUaAqtAEALw_wcB&gclsrc=aw.ds&keyword_id=kwd-18709060&previousCultureSource=URL&redirectedFrom=www.skyscanner.net&utm_campaign=PK-Flights-Search-EN-Generics&utm_medium=cpc&utm_source=google&utm_term=flight+booking");
-                    } catch (e) {
-                      Alert.alert("Error", "Unable to open Skyscanner.");
-                    }
-                  }}
-                  style={{
-                    flex: 1,
-                    backgroundColor: "#00a699",
-                    borderRadius: 12,
-                    paddingVertical: 14,
-                    alignItems: "center",
-                  }}
-                >
-                  <Ionicons name="airplane" size={18} color="#fff" />
-                  <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Skyscanner</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Direct Airline Links: Emirates & Qatar */}
-              <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
-                <TouchableOpacity
-                  onPress={async () => {
-                    try {
-                      await Linking.openURL("https://www.emirates.com/?utm_source=chatgpt.com");
-                    } catch (e) {
-                      Alert.alert("Error", "Unable to open Emirates website.");
-                    }
-                  }}
-                  style={{
-                    flex: 1,
-                    backgroundColor: "#111827",
-                    borderRadius: 12,
-                    paddingVertical: 14,
-                    alignItems: "center",
-                  }}
-                >
-                  <Ionicons name="airplane" size={18} color="#fff" />
-                  <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Emirates</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={async () => {
-                    try {
-                      await Linking.openURL("https://www.qatarairways.com/?utm_source=chatgpt.com");
-                    } catch (e) {
-                      Alert.alert("Error", "Unable to open Qatar Airways website.");
-                    }
-                  }}
-                  style={{
-                    flex: 1,
-                    backgroundColor: "#6d28d9",
-                    borderRadius: 12,
-                    paddingVertical: 14,
-                    alignItems: "center",
-                  }}
-                >
-                  <Ionicons name="airplane" size={18} color="#fff" />
-                  <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Qatar Airways</Text>
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity
-                onPress={async () => {
-                  try {
-                    // PIA booking — add utm_source
-                    await Linking.openURL("https://bookme.pk/pakistan-international-airlines?utm_source=chatgpt.com");
-                  } catch (e) {
-                    Alert.alert("Error", "Unable to open PIA booking site.");
-                  }
-                }}
-                style={{
-                  backgroundColor: "#ef4444",
-                  borderRadius: 12,
-                  paddingVertical: 14,
-                  marginTop: 10,
-                  alignItems: "center",
-                }}
-              >
-                <Ionicons name="airplane" size={18} color="#fff" />
-                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16, marginTop: 6 }}>PIA</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* ─────────────── BUS BOOKING SECTION ─────────────── */}
-      <View className="mb-8">
-        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16, gap: 8 }}>
-          <FontAwesome5 name="bus" size={22} color="#7c3aed" />
-          <Text className="text-2xl font-outfit-bold">Book Bus Seat</Text>
-        </View>
-
-        <View style={{ backgroundColor: "#f5f3ff", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#ddd6fe" }}>
-          <Text style={{ fontFamily: "outfit", color: "#4b5563", marginBottom: 12, fontSize: 14 }}>
-            📍 From: {parsedTripPlan.trip_plan.flight_details.departure_city || "Your City"}{"  ➜  "}
-            {parsedTripPlan.trip_plan.flight_details.arrival_city || parsedTripPlan.trip_plan.location}
+        {/* Trip Overview */}
+        <View className="bg-purple-50 p-4 rounded-xl mb-6">
+          <Text className="font-outfit-bold text-lg mb-2">Trip Overview</Text>
+          <Text className="font-outfit text-gray-600">
+            Duration: {parsedTripPlan.trip_plan.duration}
+          </Text>
+          <Text className="font-outfit text-gray-600">
+            Budget: {parsedTripPlan.trip_plan.budget}
           </Text>
 
-          {/* Pakistan Bus Options (shown only when trip involves Pakistan) */}
-          {isPakistanTrip() ? (
-            <>
-              <Text style={{ fontWeight: "700", marginBottom: 10, color: "#6d28d9" }}>🇵🇰 Pakistan</Text>
-              <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
-                <TouchableOpacity
-                  onPress={async () => {
-                    try {
-                      await Linking.openURL("https://daewoo.com.pk/?utm_source=chatgpt.com");
-                    } catch (e) {
-                      Alert.alert("Error", "Unable to open Daewoo website.");
-                    }
-                  }}
-                  style={{
-                    flex: 1,
-                    backgroundColor: "#0b5efd",
-                    borderRadius: 12,
-                    paddingVertical: 14,
-                    alignItems: "center",
-                  }}
-                >
-                  <FontAwesome5 name="bus" size={18} color="#fff" />
-                  <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Daewoo</Text>
-                </TouchableOpacity>
+        </View>
+
+        {/* Flight Details */}
+        <View className="mb-8">
+          <Text className="text-2xl font-outfit-bold mb-4">Flight Details</Text>
+          <View className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+            <View className="flex-row justify-between items-center mb-4">
+              <View>
+                <Text className="font-outfit-bold text-lg">
+                  {parsedTripPlan.trip_plan.flight_details.departure_city}
+                </Text>
+                <Text className="font-outfit text-gray-600">
+                  {parsedTripPlan.trip_plan.flight_details.departure_date}{" "}
+                  {parsedTripPlan.trip_plan.flight_details.departure_time}
+                </Text>
+              </View>
+
+              <Ionicons name="airplane" size={24} color="#8b5cf6" />
+
+              <View>
+                <Text className="font-outfit-bold text-lg">
+                  {parsedTripPlan.trip_plan.flight_details.arrival_city}
+                </Text>
+                <Text className="font-outfit text-gray-600">
+                  {parsedTripPlan.trip_plan.flight_details.arrival_date}{" "}
+                  {parsedTripPlan.trip_plan.flight_details.arrival_time}
+                </Text>
+              </View>
+            </View>
+
+            <View className="border-t border-gray-200 pt-4">
+              <Text className="font-outfit text-gray-600">
+                Airline: {parsedTripPlan.trip_plan.flight_details.airline}
+              </Text>
+              <Text className="font-outfit text-gray-600">
+                Flight: {parsedTripPlan.trip_plan.flight_details.flight_number}
+              </Text>
+              <Text className="font-outfit text-gray-600">
+                Price: {parsedTripPlan.trip_plan.flight_details.price}
+              </Text>
+
+              {/* ✅ REAL FLIGHT BOOKING — Providers */}
+              <View style={{ marginTop: 16, gap: 10 }}>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      try {
+                        await Linking.openURL("https://www.onetravel.com/booknow/flights/destinations/country?country-code=PK&fpaffiliate=ot-googledesktop-global-destination&fpsub=Destination-Destinations_Intl_Exact_ATLAS_Global_SP&utm_term=airline%20pakistan&fpprice=&refid=&utm_campaign=&utm_source={google}&utm_medium={cpc}&device=c&campaignid=21754998913&adgroupid=168195431259&gad_source=1&gad_campaignid=21754998913&gbraid=0AAAAA-POqERIDPfqQgVXIBuyq7EIAXaA0&gclid=Cj0KCQjwi8nRBhDhARIsAHZf_paaBlEvdhTlukCBJpj3n1CV3Ma74kMt-1UZO4qtyMIkbHzVHGNb1v0aAlAvEALw_wcB");
+                      } catch (e) {
+                        Alert.alert("Error", "Unable to open OneTravel.");
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      backgroundColor: "#1f2937",
+                      borderRadius: 12,
+                      paddingVertical: 14,
+                      alignItems: "center",
+                    }}
+                  >
+                    <Ionicons name="airplane" size={18} color="#fff" />
+                    <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>OneTravel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={async () => {
+                      try {
+                        await Linking.openURL("https://www.skyscanner.pk/pk/en-gb/pkr/?adgroupid=146649109183&associateID=SEM_FLI_19465_00000&campaign_id=19965444611&gad_campaignid=19965444611&gad_source=1&gbraid=0AAAAAD3oWFgwSfdLRvX7nhbWhXqwetOF3&gclid=Cj0KCQjwi8nRBhDhARIsAHZf_pblybeMzyaU5MANTxVTYmE2mtC9g2b_1PMvJ3y8OA4EWp36OEXHbgUaAqtAEALw_wcB&gclsrc=aw.ds&keyword_id=kwd-18709060&previousCultureSource=URL&redirectedFrom=www.skyscanner.net&utm_campaign=PK-Flights-Search-EN-Generics&utm_medium=cpc&utm_source=google&utm_term=flight+booking");
+                      } catch (e) {
+                        Alert.alert("Error", "Unable to open Skyscanner.");
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      backgroundColor: "#00a699",
+                      borderRadius: 12,
+                      paddingVertical: 14,
+                      alignItems: "center",
+                    }}
+                  >
+                    <Ionicons name="airplane" size={18} color="#fff" />
+                    <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Skyscanner</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Direct Airline Links: Emirates & Qatar */}
+                <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      try {
+                        await Linking.openURL("https://www.emirates.com/?utm_source=chatgpt.com");
+                      } catch (e) {
+                        Alert.alert("Error", "Unable to open Emirates website.");
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      backgroundColor: "#111827",
+                      borderRadius: 12,
+                      paddingVertical: 14,
+                      alignItems: "center",
+                    }}
+                  >
+                    <Ionicons name="airplane" size={18} color="#fff" />
+                    <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Emirates</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={async () => {
+                      try {
+                        await Linking.openURL("https://www.qatarairways.com/?utm_source=chatgpt.com");
+                      } catch (e) {
+                        Alert.alert("Error", "Unable to open Qatar Airways website.");
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      backgroundColor: "#6d28d9",
+                      borderRadius: 12,
+                      paddingVertical: 14,
+                      alignItems: "center",
+                    }}
+                  >
+                    <Ionicons name="airplane" size={18} color="#fff" />
+                    <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Qatar Airways</Text>
+                  </TouchableOpacity>
+                </View>
 
                 <TouchableOpacity
                   onPress={async () => {
                     try {
-                      await Linking.openURL("https://faisalmovers.com/booking/?utm_source=chatgpt.com");
+                      // PIA booking — add utm_source
+                      await Linking.openURL("https://bookme.pk/pakistan-international-airlines?utm_source=chatgpt.com");
                     } catch (e) {
-                      Alert.alert("Error", "Unable to open Faisal Movers booking page.");
+                      Alert.alert("Error", "Unable to open PIA booking site.");
                     }
                   }}
                   style={{
-                    flex: 1,
-                    backgroundColor: "#0369a1",
+                    backgroundColor: "#ef4444",
                     borderRadius: 12,
                     paddingVertical: 14,
+                    marginTop: 10,
                     alignItems: "center",
                   }}
                 >
-                  <FontAwesome5 name="ticket-alt" size={18} color="#fff" />
-                  <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Faisal Movers</Text>
+                  <Ionicons name="airplane" size={18} color="#fff" />
+                  <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16, marginTop: 6 }}>PIA</Text>
                 </TouchableOpacity>
               </View>
-            </>
-          ) : (
-            <Text style={{ color: "#6b7280", marginBottom: 12 }}>Bus booking options shown for Pakistan trips only.</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ─────────────── BUS BOOKING SECTION ─────────────── */}
+        <View className="mb-8">
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16, gap: 8 }}>
+            <FontAwesome5 name="bus" size={22} color="#7c3aed" />
+            <Text className="text-2xl font-outfit-bold">Book Bus Seat</Text>
+          </View>
+
+          <View style={{ backgroundColor: "#f5f3ff", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#ddd6fe" }}>
+            <Text style={{ fontFamily: "outfit", color: "#4b5563", marginBottom: 12, fontSize: 14 }}>
+              📍 From: {parsedTripPlan.trip_plan.flight_details.departure_city || "Your City"}{"  ➜  "}
+              {parsedTripPlan.trip_plan.flight_details.arrival_city || parsedTripPlan.trip_plan.location}
+            </Text>
+
+            {/* Pakistan Bus Options (shown only when trip involves Pakistan) */}
+            {isPakistanTrip() ? (
+              <>
+                <Text style={{ fontWeight: "700", marginBottom: 10, color: "#6d28d9" }}>🇵🇰 Pakistan</Text>
+                <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      try {
+                        await Linking.openURL("https://daewoo.com.pk/?utm_source=chatgpt.com");
+                      } catch (e) {
+                        Alert.alert("Error", "Unable to open Daewoo website.");
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      backgroundColor: "#0b5efd",
+                      borderRadius: 12,
+                      paddingVertical: 14,
+                      alignItems: "center",
+                    }}
+                  >
+                    <FontAwesome5 name="bus" size={18} color="#fff" />
+                    <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Daewoo</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={async () => {
+                      try {
+                        await Linking.openURL("https://faisalmovers.com/booking/?utm_source=chatgpt.com");
+                      } catch (e) {
+                        Alert.alert("Error", "Unable to open Faisal Movers booking page.");
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      backgroundColor: "#0369a1",
+                      borderRadius: 12,
+                      paddingVertical: 14,
+                      alignItems: "center",
+                    }}
+                  >
+                    <FontAwesome5 name="ticket-alt" size={18} color="#fff" />
+                    <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Faisal Movers</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <Text style={{ color: "#6b7280", marginBottom: 12 }}>Bus booking options shown for Pakistan trips only.</Text>
+            )}
+          </View>
+        </View>
+
+        {/* Hotels Section */}
+        <View className="mb-8">
+          <Text className="text-2xl font-outfit-bold mb-4">Hotel Options</Text>
+          {parsedTripPlan.trip_plan.hotel.options.map(
+            (hotel: any, index: number) => (
+              <View
+                key={index}
+                className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100"
+              >
+                <Image
+                  source={{ uri: hotel.image_url }}
+                  className="w-full h-48 rounded-xl mb-4"
+                />
+                <Text className="font-outfit-bold text-lg">{hotel.name}</Text>
+                <Text className="font-outfit text-gray-600 mb-2">
+                  {hotel.address}
+                </Text>
+                <Text className="font-outfit text-gray-600">
+                  Price: {hotel.price}
+                </Text>
+                <Text className="font-outfit text-gray-600">
+                  Rating: {hotel.rating} ⭐
+                </Text>
+                <Text className="font-outfit text-gray-600 mt-2">
+                  {hotel.description}
+                </Text>
+
+                <CustomButton
+                  title="View on Map"
+                  onPress={() =>
+                    handleOpenMap(
+                      hotel.geo_coordinates.latitude,
+                      hotel.geo_coordinates.longitude
+                    )
+                  }
+                  className="mt-4"
+                />
+              </View>
+            )
           )}
         </View>
-      </View>
 
-      {/* Hotels Section */}
-      <View className="mb-8">
-        <Text className="text-2xl font-outfit-bold mb-4">Hotel Options</Text>
-        {parsedTripPlan.trip_plan.hotel.options.map(
-          (hotel: any, index: number) => (
-            <View
-              key={index}
-              className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100"
-            >
-              <Image
-                source={{ uri: hotel.image_url }}
-                className="w-full h-48 rounded-xl mb-4"
-              />
-              <Text className="font-outfit-bold text-lg">{hotel.name}</Text>
-              <Text className="font-outfit text-gray-600 mb-2">
-                {hotel.address}
-              </Text>
-              <Text className="font-outfit text-gray-600">
-                Price: {hotel.price}
-              </Text>
-              <Text className="font-outfit text-gray-600">
-                Rating: {hotel.rating} ⭐
-              </Text>
-              <Text className="font-outfit text-gray-600 mt-2">
-                {hotel.description}
-              </Text>
+        {/* Places to Visit */}
+        <View className="mb-8">
+          <Text className="text-2xl font-outfit-bold mb-4">
+            Places to Visit
+          </Text>
 
-              <CustomButton
-                title="View on Map"
-                onPress={() =>
-                  handleOpenMap(
-                    hotel.geo_coordinates.latitude,
-                    hotel.geo_coordinates.longitude
-                  )
-                }
-                className="mt-4"
-              />
-            </View>
-          )
-        )}
-      </View>
+          {parsedTripPlan.trip_plan.places_to_visit.map(
+            (place: any, index: number) => (
+              <View
+                key={index}
+                className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100"
+              >
+                <Image
+                  source={{ uri: place.image_url }}
+                  className="w-full h-48 rounded-xl mb-4"
+                />
+                <Text className="font-outfit-bold text-lg">{place.name}</Text>
+                <Text className="font-outfit text-gray-600 mb-2">
+                  {place.details}
+                </Text>
+                <Text className="font-outfit text-gray-600">
+                  Ticket Price: {place.ticket_price}
+                </Text>
+                <Text className="font-outfit text-gray-600">
+                  Time to Travel: {place.time_to_travel}
+                </Text>
 
-      {/* Places to Visit */}
-      <View className="mb-8">
-        <Text className="text-2xl font-outfit-bold mb-4">
-          Places to Visit
-        </Text>
-
-        {parsedTripPlan.trip_plan.places_to_visit.map(
-          (place: any, index: number) => (
-            <View
-              key={index}
-              className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100"
-            >
-              <Image
-                source={{ uri: place.image_url }}
-                className="w-full h-48 rounded-xl mb-4"
-              />
-              <Text className="font-outfit-bold text-lg">{place.name}</Text>
-              <Text className="font-outfit text-gray-600 mb-2">
-                {place.details}
-              </Text>
-              <Text className="font-outfit text-gray-600">
-                Ticket Price: {place.ticket_price}
-              </Text>
-              <Text className="font-outfit text-gray-600">
-                Time to Travel: {place.time_to_travel}
-              </Text>
-
-              <CustomButton
-                title="View on Map"
-                onPress={() =>
-                  handleOpenMap(
-                    place.geo_coordinates.latitude,
-                    place.geo_coordinates.longitude
-                  )
-                }
-                className="mt-4"
-              />
-            </View>
-          )
-        )}
-      </View>
-    </ScrollView>
+                <CustomButton
+                  title="View on Map"
+                  onPress={() =>
+                    handleOpenMap(
+                      place.geo_coordinates.latitude,
+                      place.geo_coordinates.longitude
+                    )
+                  }
+                  className="mt-4"
+                />
+              </View>
+            )
+          )}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 

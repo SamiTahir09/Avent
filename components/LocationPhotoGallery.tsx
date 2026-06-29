@@ -11,8 +11,6 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import GooglePlacesService from "../services/GooglePlaces";
-import PlaceMapView from "./PlaceMapView";
-import { Modal } from "react-native";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_WIDTH = SCREEN_WIDTH * 0.72;
@@ -260,8 +258,6 @@ const LocationPhotoGallery: React.FC<Props> = ({
     setActiveIndex(index);
   };
 
-  const [showMap, setShowMap] = useState(false);
-
   return (
     <View style={[styles.container, style]}>
       {/* Header */}
@@ -336,14 +332,6 @@ const LocationPhotoGallery: React.FC<Props> = ({
       {/* Gallery */}
       {!loading && photos.length > 0 && (
         <>
-          <TouchableOpacity
-            style={{ alignSelf: "flex-end", marginBottom: 8, marginRight: 8 }}
-            onPress={() => setShowMap(true)}
-          >
-            <View style={{ backgroundColor: "#6d28d9", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}>
-              <Text style={{ color: "#fff", fontFamily: "outfit-medium" }}>View on Map</Text>
-            </View>
-          </TouchableOpacity>
           <ScrollView
             ref={scrollRef}
             horizontal
@@ -385,26 +373,6 @@ const LocationPhotoGallery: React.FC<Props> = ({
           ) : null}
         </>
       )}
-
-      <Modal visible={showMap} animationType="slide">
-        {debugInfo ? (
-          <PlaceMapView
-            lat={debugInfo.lat}
-            lng={debugInfo.lng}
-            name={debugInfo.name}
-            apiKey={googleApiKey || GOOGLE_API_KEY}
-            onClose={() => setShowMap(false)}
-          />
-        ) : (
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-            <ActivityIndicator />
-            <Text style={{ marginTop: 8 }}>No place info available</Text>
-            <TouchableOpacity onPress={() => setShowMap(false)} style={{ marginTop: 12 }}>
-              <Text style={{ color: "#6d28d9" }}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </Modal>
     </View>
   );
 };
