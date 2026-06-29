@@ -99,7 +99,7 @@ const SignIn = () => {
             title={isLoading ? "Logging In..." : "Log In"}
             onPress={onLoginPress}
             className="mt-6"
-            disabled={isLoading}
+            isLoading={isLoading}
           />
 
           <DummyLogin />

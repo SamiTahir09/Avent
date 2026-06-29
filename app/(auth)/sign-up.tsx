@@ -104,7 +104,7 @@ const SignUp = () => {
             title={isLoading ? "Creating Account..." : "Sign Up"}
             onPress={onSignUpPress}
             className="mt-6"
-            disabled={isLoading}
+            isLoading={isLoading}
           />
 
           <DummyLogin />

@@ -1,6 +1,6 @@
 import { View, Text, Image, FlatList, Alert } from "react-native";
 import React from "react";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import moment from "moment";
 import CustomButton from "@/components/CustomButton";
@@ -11,6 +11,7 @@ import WeatherAdvice from "@/components/WeatherAdvice";
 
 const TripDetails = () => {
   const router = useRouter();
+  const navigation = useNavigation();
   const { tripData, tripPlan } = useLocalSearchParams();
 
   const parsedTripData = JSON.parse(tripData as string);
@@ -30,6 +31,16 @@ const TripDetails = () => {
   const budget = parsedTripData?.find((item: any) => item.budget)?.budget?.type;
 
   const [imageUri, setImageUri] = React.useState<string>(locationInfo?.imageUrl || "");
+  const [isWeatherLoading, setIsWeatherLoading] = React.useState(false);
+  const [isLocationLoading, setIsLocationLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      setIsWeatherLoading(false);
+      setIsLocationLoading(false);
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const DEFAULT_IMAGE_URL =
     "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?q=80&w=2071&auto=format&fit=crop";
@@ -110,12 +121,15 @@ const TripDetails = () => {
       return;
     }
 
+    setIsWeatherLoading(true);
     const place = parsedTripPlan?.trip_plan?.location || locationInfo?.name || "Destination";
 
-    router.push({
-      pathname: "/weather-outfit",
-      params: { lat: String(lat), lon: String(lon), placeName: place },
-    });
+    setTimeout(() => {
+      router.push({
+        pathname: "/weather-outfit",
+        params: { lat: String(lat), lon: String(lon), placeName: place },
+      });
+    }, 100);
   };
 
   React.useEffect(() => {
@@ -220,7 +234,7 @@ const TripDetails = () => {
               </View>
 
               {/* ── Real-World Photo Gallery ── */}
-              <CustomButton title="🌤️ Discover Weather & Outfits" onPress={handleDiscoverWeather} className="mt-3" />
+              <CustomButton isLoading={isWeatherLoading} title="🌤️ Discover Weather & Outfits" onPress={handleDiscoverWeather} className="mt-3" />
 
               <WeatherAdvice coords={destCoords} placeName={parsedTripPlan?.trip_plan?.location || parsedTripData?.location} days={3} />
               <AIPackingSuggestions coords={destCoords} days={3} />
@@ -243,12 +257,16 @@ const TripDetails = () => {
 
               <CustomButton
                 title="Discover Location"
-                onPress={() =>
-                  router.push({
-                    pathname: "/(tabs)/discover",
-                    params: { tripData, tripPlan },
-                  })
-                }
+                isLoading={isLocationLoading}
+                onPress={() => {
+                  setIsLocationLoading(true);
+                  setTimeout(() => {
+                    router.push({
+                      pathname: "/(tabs)/discover",
+                      params: { tripData, tripPlan },
+                    });
+                  }, 100);
+                }}
                 className="mt-3"
               />
             </View>

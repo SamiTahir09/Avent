@@ -2,7 +2,7 @@ import { View, Text, Image } from "react-native";
 import React from "react";
 import moment from "moment";
 import CustomButton from "../CustomButton";
-import { useRouter } from "expo-router";
+import { useRouter, useNavigation } from "expo-router";
 import { isDemoMode } from "@/config/env";
 
 const DEFAULT_TRIP_IMAGE =
@@ -10,6 +10,15 @@ const DEFAULT_TRIP_IMAGE =
 
 const UserTripCard = ({ trip }: { trip: any }) => {
   const router = useRouter();
+  const navigation = useNavigation();
+  const [isViewLoading, setIsViewLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      setIsViewLoading(false);
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const tripData = trip?.tripData ? JSON.parse(trip.tripData) : [];
   const locationInfo = tripData?.find(
@@ -87,15 +96,19 @@ const UserTripCard = ({ trip }: { trip: any }) => {
       <View className="flex-1">
         <CustomButton
           title="View Trip"
-          onPress={() =>
-            router.push({
-              pathname: "/trip-details",
-              params: {
-                tripData: trip.tripData,
-                tripPlan: JSON.stringify(trip.tripPlan),
-              },
-            })
-          }
+          onPress={() => {
+            setIsViewLoading(true);
+            setTimeout(() => {
+              router.push({
+                pathname: "/trip-details",
+                params: {
+                  tripData: trip.tripData,
+                  tripPlan: JSON.stringify(trip.tripPlan),
+                },
+              });
+            }, 100);
+          }}
+          isLoading={isViewLoading}
           disabled={isPastTrip}
           className={`mt-2 py-0.5 ${isPastTrip ? "opacity-50" : ""}`}
         />

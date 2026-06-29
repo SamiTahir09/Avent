@@ -3,7 +3,7 @@ import React from "react";
 import moment from "moment";
 import CustomButton from "../CustomButton";
 import UserTripCard from "./UserTripCard";
-import { useRouter } from "expo-router";
+import { useRouter, useNavigation } from "expo-router";
 import { isDemoMode } from "@/config/env";
 
 const DEFAULT_TRIP_IMAGE =
@@ -11,6 +11,15 @@ const DEFAULT_TRIP_IMAGE =
 
 const UserTripList = ({ userTrips }: { userTrips: any[] }) => {
   const router = useRouter();
+  const navigation = useNavigation();
+  const [isViewLoading, setIsViewLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      setIsViewLoading(false);
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   // Sort trips by start date
   const sortedTrips = [...userTrips].sort((a, b) => {
@@ -108,15 +117,19 @@ const UserTripList = ({ userTrips }: { userTrips: any[] }) => {
 
           <CustomButton
             title="View Trip"
-            onPress={() =>
-              router.push({
-                pathname: "/trip-details",
-                params: {
-                  tripData: sortedTrips[0].tripData,
-                  tripPlan: JSON.stringify(sortedTrips[0].tripPlan),
-                },
-              })
-            }
+            onPress={() => {
+              setIsViewLoading(true);
+              setTimeout(() => {
+                router.push({
+                  pathname: "/trip-details",
+                  params: {
+                    tripData: sortedTrips[0].tripData,
+                    tripPlan: JSON.stringify(sortedTrips[0].tripPlan),
+                  },
+                });
+              }, 100);
+            }}
+            isLoading={isViewLoading}
             className={`mt-3 ${isPastTrip ? "opacity-50" : ""}`}
           />
         </View>

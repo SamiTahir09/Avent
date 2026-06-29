@@ -6,8 +6,11 @@ import { demoSignIn } from "@/config/demoMode";
 import { router } from "expo-router";
 
 const DummyLogin = () => {
+  const [isLoading, setIsLoading] = React.useState(false);
+
   const handleDummyLogin = async () => {
     try {
+      setIsLoading(true);
       if (isDemoMode()) {
         await demoSignIn("demo@avent.app", "demo123");
         router.replace("/(tabs)/mytrip");
@@ -21,6 +24,8 @@ const DummyLogin = () => {
     } catch (error: any) {
       console.error("Error signing in with dummy account:", error);
       alert("Error signing in with dummy account. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -33,11 +38,12 @@ const DummyLogin = () => {
       </View>
 
       <CustomButton
-        title="Use Dummy Account"
+        title={isLoading ? "Logging in..." : "Use Dummy Account"}
         className="mt-5 w-full"
         bgVariant="outline"
         textVariant="primary"
         onPress={handleDummyLogin}
+        isLoading={isLoading}
       />
     </View>
   );
