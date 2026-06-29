@@ -17,7 +17,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/avent-sign.jpg",
+        "foregroundImage": "./assets/images/travel.logo.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.samiitahir.avent"
