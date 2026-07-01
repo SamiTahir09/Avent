@@ -1,11 +1,12 @@
 import { Redirect } from "expo-router";
-import { View, ActivityIndicator } from "react-native";
 import { auth, onAuthStateChanged } from "@/config/FirebaseConfig";
 import { useEffect, useState } from "react";
+import InteractiveOpeningLogo from "@/components/InteractiveOpeningLogo";
 
 export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState(auth.currentUser);
+  const [showOpening, setShowOpening] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user: any) => {
@@ -13,15 +14,14 @@ export default function HomeScreen() {
       setIsLoading(false);
     });
 
-    // Cleanup subscription on unmount
     return () => unsubscribe();
   }, []);
 
   if (isLoading) {
-    return (
-      <View className="flex-1 justify-center items-center">
-        <ActivityIndicator size="large" color="#8b5cf6" />
-      </View>
+    return showOpening ? (
+      <InteractiveOpeningLogo onFinish={() => setShowOpening(false)} />
+    ) : (
+      <Redirect href="/(auth)/welcome" />
     );
   }
 

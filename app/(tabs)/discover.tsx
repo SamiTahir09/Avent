@@ -331,7 +331,7 @@ const Discover = () => {
                 Price: {parsedTripPlan.trip_plan.flight_details.price}
               </Text>
 
-              {/* ✅ REAL FLIGHT BOOKING — Providers */}
+              {/*  REAL FLIGHT BOOKING — Providers */}
               <View style={{ marginTop: 16, gap: 10 }}>
                 <View style={{ flexDirection: "row", gap: 10 }}>
                   <TouchableOpacity
