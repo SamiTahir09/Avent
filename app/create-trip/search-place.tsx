@@ -24,8 +24,12 @@ const SearchPlace = () => {
   const router = useRouter();
   const { setTripData } = useContext(CreateTripContext);
   const [demoPlace, setDemoPlace] = useState("");
+  const [typedDestination, setTypedDestination] = useState("");
 
   const saveLocation = async (name: string) => {
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+
     let lat = 28.6139;
     let lng = 77.209;
     let imageUrl = "";
@@ -128,9 +132,12 @@ const SearchPlace = () => {
           textInputProps={{
             placeholderTextColor: "#818181",
             returnKeyType: "search",
+            value: typedDestination,
+            onChangeText: setTypedDestination,
             onSubmitEditing: (e) => {
-              if (e.nativeEvent.text.trim()) {
-                router.push("/create-trip/select-traveler");
+              const nextValue = e.nativeEvent.text.trim();
+              if (nextValue) {
+                saveLocation(nextValue);
               }
             },
             clearButtonMode: "never",
@@ -202,6 +209,17 @@ const SearchPlace = () => {
               color: "#b5b3b3",
             },
           }}
+        />
+
+        <CustomButton
+          title="Next"
+          onPress={() => {
+            const nextValue = typedDestination.trim();
+            if (nextValue) {
+              saveLocation(nextValue);
+            }
+          }}
+          className="mt-4"
         />
       </View>
     </View>
