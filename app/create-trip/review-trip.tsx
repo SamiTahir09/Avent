@@ -50,10 +50,18 @@ const ReviewTrip = () => {
   const { tripData, setTripData } = useContext(CreateTripContext);
   const safeTripData = Array.isArray(tripData) ? tripData : [];
 
-  const travelers = safeTripData.find((item) => item.travelers)?.travelers;
-  const dates = safeTripData.find((item) => item.dates)?.dates;
-  const budget = safeTripData.find((item) => item.budget)?.budget;
-  const locationInfo = safeTripData.find((item) => item.locationInfo)?.locationInfo;
+  const travelers = safeTripData.find(
+    (item): item is { travelers: TripTravelers } => "travelers" in item
+  )?.travelers;
+  const dates = safeTripData.find(
+    (item): item is { dates: TripDates } => "dates" in item
+  )?.dates;
+  const budget = safeTripData.find(
+    (item): item is { budget: TripBudget } => "budget" in item
+  )?.budget;
+  const locationInfo = safeTripData.find(
+    (item): item is { locationInfo: TripLocationInfo } => "locationInfo" in item
+  )?.locationInfo;
   const coordinates = useMemo(
     () => parseCoordinates(locationInfo?.coordinates),
     [locationInfo?.coordinates]
@@ -100,10 +108,12 @@ const ReviewTrip = () => {
         setWeatherData(res);
         setTripData((prev) => {
           const current = Array.isArray(prev) ? prev : [];
-          const currentLocation = current.find((item) => item.locationInfo)?.locationInfo;
+          const currentLocation = current.find(
+            (item): item is { locationInfo: TripLocationInfo } => "locationInfo" in item
+          )?.locationInfo;
           if (!currentLocation) return current;
 
-          const others = current.filter((item) => !item.locationInfo);
+          const others = current.filter((item) => !("locationInfo" in item));
           return [
             ...others,
             {
@@ -160,10 +170,12 @@ const ReviewTrip = () => {
       setWeatherData(res);
       setTripData((prev) => {
         const current = Array.isArray(prev) ? prev : [];
-        const currentLocation = current.find((item) => item.locationInfo)?.locationInfo;
+        const currentLocation = current.find(
+          (item): item is { locationInfo: TripLocationInfo } => "locationInfo" in item
+        )?.locationInfo;
         if (!currentLocation) return current;
 
-        const others = current.filter((item) => !item.locationInfo);
+        const others = current.filter((item) => !("locationInfo" in item));
         return [
           ...others,
           {

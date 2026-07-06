@@ -8,6 +8,7 @@ import { isDemoMode } from "@/config/env";
 import LocationPhotoGallery from "@/components/LocationPhotoGallery";
 import AIPackingSuggestions from "@/components/AIPackingSuggestions";
 import WeatherAdvice from "@/components/WeatherAdvice";
+import { WeatherInfo, ForecastDay } from "@/services/WeatherService";
 
 const TripDetails = () => {
   const router = useRouter();
@@ -76,7 +77,7 @@ const TripDetails = () => {
     const feels = typeof w.feelsLikeC === "number" && !Number.isNaN(w.feelsLikeC) ? w.feelsLikeC : w.tempC;
     const rain = typeof w.chanceOfRain === "number" ? w.chanceOfRain : (w.forecast && w.forecast[0]?.chanceOfRain) ?? 0;
 
-    if (cond.includes("snow") || (w.forecast && w.forecast.some(fd => (fd.tempMinC !== null && fd.tempMinC <= 2) && (fd.chanceOfRain && fd.chanceOfRain > 30)))) {
+    if (cond.includes("snow") || (w.forecast && w.forecast.some((fd: ForecastDay) => (fd.tempMinC !== null && fd.tempMinC <= 2) && (fd.chanceOfRain && fd.chanceOfRain > 30)))) {
       items.add("Thermal Wear");
       items.add("Heavy Jacket");
       items.add("Boots");

@@ -26,8 +26,7 @@ export type WeatherInfo = {
   raw: any;
 };
 
-const WEATHERAPI_KEY =
-  "d1996186981a47078dc74337261806";
+const WEATHERAPI_KEY = process.env.EXPO_PUBLIC_WEATHERAPI_KEY || "";
 
 const fetchFromWeatherAPI = async (
   lat: number,

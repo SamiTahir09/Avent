@@ -82,8 +82,8 @@ export async function demoSignUp(email: string, password: string) {
   return demoSignIn(email, password);
 }
 
-export async function demoSaveTrip(trip: Record<string, unknown>) {
-  const docId = (trip.docId as string) || Date.now().toString();
+export async function demoSaveTrip(trip: TripRecord) {
+  const docId = trip.docId || Date.now().toString();
   await AsyncStorage.setItem(`${TRIPS_KEY}_${docId}`, JSON.stringify(trip));
 
   let tripIds: string[] = [];

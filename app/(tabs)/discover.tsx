@@ -10,6 +10,9 @@ import LocationPhotoGallery from "@/components/LocationPhotoGallery";
 const DEFAULT_IMAGE_URL =
   "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?q=80&w=2071&auto=format&fit=crop";
 
+const firstWord = (name: unknown): string =>
+  typeof name === "string" && name.trim() ? name.split(",")[0].trim() : "";
+
 const UNSPLASH_KEY = process.env.EXPO_PUBLIC_UNSPLASH_ACCESS_KEY || "";
 
 const fetchUnsplashImage = async (query: string) => {
@@ -44,6 +47,8 @@ const Discover = () => {
   const fetchPlaceImage = async (placeName: string) => {
     const defaultFallback = "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?q=80&w=2071&auto=format&fit=crop";
     const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY;
+
+    if (!placeName || typeof placeName !== "string") return defaultFallback;
 
     // 1) Prefer Unsplash if key available
     try {
@@ -110,7 +115,7 @@ const Discover = () => {
               if (h.image_url) return h.image_url;
               const fromPlace = await fetchPlaceImage(h.name);
               if (fromPlace && fromPlace !== DEFAULT_IMAGE_URL) return fromPlace;
-              const fromUnsplash = await fetchUnsplashImage(`${h.name.split(",")[0].trim()} hotel`);
+              const fromUnsplash = await fetchUnsplashImage(`${firstWord(h.name)} hotel`);
               return fromUnsplash || DEFAULT_IMAGE_URL;
             })()
           );
@@ -142,7 +147,7 @@ const Discover = () => {
               if (p.image_url) return p.image_url;
               const fromPlace = await fetchPlaceImage(p.name);
               if (fromPlace && fromPlace !== DEFAULT_IMAGE_URL) return fromPlace;
-              const fromUnsplash = await fetchUnsplashImage(`${p.name.split(",")[0].trim()} travel`);
+              const fromUnsplash = await fetchUnsplashImage(`${firstWord(p.name)} travel`);
               return fromUnsplash || DEFAULT_IMAGE_URL;
             })()
           );

@@ -29,7 +29,7 @@ const SelectDates = () => {
 
     if (selectedStartDate && selectedEndDate) {
       setTripData((prev) => {
-        const newData = prev.filter((item) => !item.dates);
+        const newData = prev.filter((item) => !("dates" in item));
         return [
           ...newData,
           {

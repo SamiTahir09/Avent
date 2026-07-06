@@ -14,7 +14,7 @@ const SelectTraveler = () => {
 
   const handleSelectTraveler = (option: any) => {
     setTripData((prev) => {
-      const newData = prev.filter((item) => !item.travelers);
+      const newData = prev.filter((item) => !("travelers" in item));
       return [
         ...newData,
         {

@@ -1,4 +1,4 @@
-import { View, Text, Image } from "react-native";
+import { View, Text, Image, TouchableOpacity, Alert } from "react-native";
 import React, { useContext, useEffect, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CreateTripContext } from "@/context/CreateTripContext";
@@ -9,6 +9,21 @@ import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
 import { demoSaveTrip } from "@/config/demoMode";
+import { isOnline, queueTripForSync } from "@/services/OfflineSync";
+
+const generateTripId = () =>
+  `${Date.now().toString()}${Math.random().toString(36).slice(2, 8)}`;
+
+type GenerationStep = "prompting" | "enriching" | "saving";
+
+const STEP_LABELS: Record<GenerationStep, string> = {
+  prompting: "Asking AI to build your itinerary...",
+  enriching: "Fetching photos and locations...",
+  saving: "Saving your trip...",
+};
+
+const firstWord = (name: unknown): string =>
+  typeof name === "string" && name.trim() ? name.split(",")[0].trim() : "";
 
 const UNSPLASH_KEY = process.env.EXPO_PUBLIC_UNSPLASH_ACCESS_KEY || "";
 
@@ -34,6 +49,8 @@ const fetchUnsplashImage = async (query: string): Promise<string> => {
 const GenerateTrip = () => {
   const { tripData } = useContext(CreateTripContext);
   const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<GenerationStep>("prompting");
+  const [error, setError] = useState<string | null>(null);
   const user = auth.currentUser;
 
   const router = useRouter();
@@ -44,13 +61,21 @@ const GenerateTrip = () => {
 
   const generateTrip = async () => {
     setLoading(true);
+    setError(null);
+    setStep("prompting");
 
     const locationInfo = tripData.find(
-      (item) => item.locationInfo
+      (item): item is { locationInfo: TripLocationInfo } => "locationInfo" in item
     )?.locationInfo;
-    const travelers = tripData.find((item) => item.travelers)?.travelers;
-    const dates = tripData.find((item) => item.dates)?.dates;
-    const budget = tripData.find((item) => item.budget)?.budget;
+    const travelers = tripData.find(
+      (item): item is { travelers: TripTravelers } => "travelers" in item
+    )?.travelers;
+    const dates = tripData.find(
+      (item): item is { dates: TripDates } => "dates" in item
+    )?.dates;
+    const budget = tripData.find(
+      (item): item is { budget: TripBudget } => "budget" in item
+    )?.budget;
 
     const totalDays = dates?.totalNumberOfDays || 0;
     const totalNights = totalDays > 0 ? totalDays - 1 : 0;
@@ -67,22 +92,28 @@ const GenerateTrip = () => {
       )
       .replace("{budget}", budget?.type || "");
 
-    const result = await chatSession.sendMessage(FINAL_PROMPT);
     let tripResponse: any;
     try {
+      const result = await chatSession.sendMessage(FINAL_PROMPT);
       tripResponse = JSON.parse(result.response.text());
-    } catch {
-      console.error("AI response was not valid JSON — aborting trip generation");
+    } catch (err: any) {
+      console.error("AI trip generation failed:", err);
       setLoading(false);
-      router.replace("/(tabs)/mytrip");
+      setError(
+        err?.message?.includes("404") || err?.message?.includes("not found")
+          ? "The AI model is unavailable right now. Please try again later."
+          : "Couldn't generate your itinerary. Please check your connection and try again."
+      );
       return;
     }
 
+    setStep("enriching");
+
     // Enrich coordinates and images for the trip plan
-    const finalTripData = [...tripData];
+    const finalTripData: any[] = [...tripData];
     try {
       const location = locationInfo?.name || tripResponse?.trip_plan?.location || "";
-      const cityName = location.split(",")[0].trim();
+      const cityName = firstWord(location) || "the destination";
       
       let destLat = locationInfo?.coordinates?.lat || 28.6139;
       let destLng = locationInfo?.coordinates?.lng || 77.209;
@@ -130,11 +161,12 @@ const GenerateTrip = () => {
         const hotelOptions = tripResponse.trip_plan.hotel.options;
         // Fetch all hotel images in parallel
         const hotelImgPromises = hotelOptions.map((hotel: any) =>
-          fetchUnsplashImage(`${hotel.name.split(",")[0].trim()} hotel ${cityName}`)
+          fetchUnsplashImage(`${firstWord(hotel.name) || cityName} hotel ${cityName}`)
         );
         const hotelImgs = await Promise.all(hotelImgPromises);
         for (let i = 0; i < hotelOptions.length; i++) {
           const hotel = hotelOptions[i];
+          if (!hotel.name) hotel.name = `${cityName} Hotel ${i + 1}`;
           hotel.geo_coordinates = {
             latitude: destLat + (i === 0 ? 0.005 : i === 1 ? -0.005 : 0.008),
             longitude: destLng + (i === 0 ? 0.005 : i === 1 ? -0.005 : -0.008),
@@ -150,7 +182,7 @@ const GenerateTrip = () => {
         const places = tripResponse.trip_plan.places_to_visit;
         // Fetch all place images in parallel
         const placeImgPromises = places.map((place: any) =>
-          fetchUnsplashImage(`${place.name.split(",")[0].trim()} ${cityName} travel attraction`)
+          fetchUnsplashImage(`${firstWord(place.name) || cityName} ${cityName} travel attraction`)
         );
         const placeImgs = await Promise.all(placeImgPromises);
         const fallbacks = [
@@ -160,6 +192,7 @@ const GenerateTrip = () => {
         ];
         for (let i = 0; i < places.length; i++) {
           const place = places[i];
+          if (!place.name) place.name = `${cityName} Attraction ${i + 1}`;
           place.geo_coordinates = {
             latitude: destLat + (i === 0 ? 0.002 : i === 1 ? -0.002 : i === 2 ? 0.004 : -0.004),
             longitude: destLng + (i === 0 ? -0.002 : i === 1 ? 0.002 : i === 2 ? -0.004 : 0.004),
@@ -171,29 +204,91 @@ const GenerateTrip = () => {
       console.error("Error resolving assets during trip generation:", e);
     }
 
-    const docId = Date.now().toString();
+    setStep("saving");
 
-    const tripRecord = {
+    const docId = generateTripId();
+
+    const tripRecord: TripRecord = {
       userEmail: user?.email,
       tripPlan: tripResponse,
       tripData: JSON.stringify(finalTripData),
       docId: docId,
     };
 
-    try {
-      if (isDemoMode()) {
+    if (isDemoMode()) {
+      try {
         await demoSaveTrip(tripRecord);
-      } else {
-        await setDoc(doc(db, "UserTrips", docId), tripRecord);
+      } catch (saveErr) {
+        console.error("Error saving demo trip:", saveErr);
+        setLoading(false);
+        setError("Your itinerary was generated but couldn't be saved. Please try again.");
+        return;
       }
-    } catch (saveErr) {
-      console.error("Error saving trip:", saveErr);
-    } finally {
       setLoading(false);
+      router.replace("/(tabs)/mytrip");
+      return;
     }
 
+    const saveOfflineAndExit = async () => {
+      await queueTripForSync(tripRecord);
+      setLoading(false);
+      Alert.alert(
+        "Saved Offline",
+        "You're offline — this trip is saved on your device and will sync automatically once you're back online."
+      );
+      router.replace("/(tabs)/mytrip");
+    };
+
+    if (!(await isOnline())) {
+      await saveOfflineAndExit();
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, "UserTrips", docId), tripRecord);
+    } catch (saveErr) {
+      console.error("Error saving trip:", saveErr);
+      if (!(await isOnline())) {
+        await saveOfflineAndExit();
+        return;
+      }
+      setLoading(false);
+      setError("Your itinerary was generated but couldn't be saved. Please try again.");
+      return;
+    }
+
+    setLoading(false);
     router.replace("/(tabs)/mytrip");
   };
+
+  if (error) {
+    return (
+      <SafeAreaView className="p-6 h-full flex flex-col items-center justify-center">
+        <Text className="font-outfit-bold text-3xl text-center text-red-500">
+          Something went wrong
+        </Text>
+        <Text className="font-outfit-medium text-lg text-center mt-4 text-gray-600">
+          {error}
+        </Text>
+
+        <TouchableOpacity
+          onPress={generateTrip}
+          className="bg-purple-600 rounded-full px-8 py-4 mt-10"
+        >
+          <Text className="font-outfit-bold text-white text-lg">Try Again</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => router.replace("/(tabs)/mytrip")}
+          className="mt-4 px-8 py-3"
+        >
+          <Text className="font-outfit-medium text-gray-500 text-base">
+            Go Back
+          </Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="p-6 h-full flex flex-col items-center justify-center">
@@ -201,7 +296,7 @@ const GenerateTrip = () => {
         Please Wait...
       </Text>
       <Text className="font-outfit-medium text-xl text-center mt-10">
-        Generating your itinerary...
+        {STEP_LABELS[step]}
       </Text>
 
       <Image

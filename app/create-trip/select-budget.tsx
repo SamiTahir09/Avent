@@ -16,7 +16,7 @@ const SelectBudget = () => {
 
   const handleSelectBudget = (option: any) => {
     setTripData((prev) => {
-      const newData = prev.filter((item) => !item.budget);
+      const newData = prev.filter((item) => !("budget" in item));
       return [...newData, { budget: { type: option.title } }];
     });
     // Navigate to next screen or handle selection

@@ -38,8 +38,6 @@ if (isDemoMode()) {
   auth = initializeAuth(app, {
     persistence: getReactNativePersistence(AsyncStorage),
   });
-  const { signOut: firebaseSignOut } = require("firebase/auth");
-  auth.signOut = () => firebaseSignOut(auth);
   db = getFirestore(app);
   onAuthStateChanged = firebaseOnAuthStateChanged;
 }

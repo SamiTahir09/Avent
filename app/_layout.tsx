@@ -14,6 +14,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import "../global.css";
 import "react-native-get-random-values";
 import { CreateTripContext } from "@/context/CreateTripContext";
+import { isDemoMode } from "@/config/env";
+import { startOfflineSyncListener } from "@/services/OfflineSync";
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
@@ -32,6 +34,12 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [loaded]);
+
+  useEffect(() => {
+    if (isDemoMode()) return;
+    const unsubscribe = startOfflineSyncListener();
+    return unsubscribe;
+  }, []);
 
   if (!loaded) {
     return null;

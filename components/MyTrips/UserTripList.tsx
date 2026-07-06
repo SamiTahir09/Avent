@@ -106,6 +106,13 @@ const UserTripList = ({ userTrips }: { userTrips: any[] }) => {
           >
             {sortedTrips[0]?.tripPlan?.trip_plan?.location}
           </Text>
+          {sortedTrips[0]?.pendingSync ? (
+            <View className="bg-amber-100 self-start px-2 py-0.5 rounded-full mt-1">
+              <Text className="text-amber-700 text-xs font-outfit-medium">
+                Pending Sync
+              </Text>
+            </View>
+          ) : null}
           <View className="flex flex-row justify-between items-center mt-2">
             <Text className="font-outfit text-lg text-gray-500">
               {moment(startDate).format("DD MMM yyyy")}
