@@ -263,7 +263,7 @@ const TripDetails = () => {
                   setIsLocationLoading(true);
                   setTimeout(() => {
                     router.push({
-                      pathname: "/(tabs)/discover",
+                      pathname: "/location-details",
                       params: { tripData, tripPlan },
                     });
                   }, 100);

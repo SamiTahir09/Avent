@@ -68,6 +68,7 @@ export default function RootLayout() {
               <Stack.Screen name="weather-details" />
               <Stack.Screen name="weather-week" />
               <Stack.Screen name="weather-outfit" />
+              <Stack.Screen name="location-details" />
               <Stack.Screen name="trip-details" />
               <Stack.Screen name="premium" options={{ presentation: "modal" }} />
             </Stack>

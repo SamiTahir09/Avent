@@ -1,28 +1,35 @@
-import { View, Text, ScrollView, Image, Linking, Alert, TouchableOpacity, ActivityIndicator } from "react-native";
-import React, { useEffect, useState } from "react";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import moment from "moment";
-import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
-import CustomButton from "@/components/CustomButton";
-import LocationPhotoGallery from "@/components/LocationPhotoGallery";
-import PremiumGate from "@/components/PremiumGate";
+import {
+  View,
+  Text,
+  ScrollView,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
+  Dimensions,
+} from "react-native";
+import React, { useContext, useEffect, useState } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { CreateTripContext } from "@/context/CreateTripContext";
+import { usePremiumStore, selectCanGenerateTrip } from "@/store/premiumStore";
+import PremiumPaywall from "@/components/PremiumPaywall";
+
+const { width } = Dimensions.get("window");
+const CARD_WIDTH = (width - 24 * 2 - 14) / 2;
 
 const DEFAULT_IMAGE_URL =
   "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?q=80&w=2071&auto=format&fit=crop";
 
-const firstWord = (name: unknown): string =>
-  typeof name === "string" && name.trim() ? name.split(",")[0].trim() : "";
-
 const UNSPLASH_KEY = process.env.EXPO_PUBLIC_UNSPLASH_ACCESS_KEY || "";
 
-const fetchUnsplashImage = async (query: string) => {
+const fetchUnsplashImage = async (query: string): Promise<string> => {
   if (!UNSPLASH_KEY) return "";
   try {
     const res = await fetch(
       `https://api.unsplash.com/search/photos?query=${encodeURIComponent(
         query
-      )}&per_page=3&orientation=landscape`,
+      )}&per_page=3&orientation=portrait`,
       { headers: { Authorization: `Client-ID ${UNSPLASH_KEY}` } }
     );
     if (!res.ok) return "";
@@ -31,594 +38,472 @@ const fetchUnsplashImage = async (query: string) => {
     if (!results.length) return "";
     const pick = results[Math.floor(Math.random() * Math.min(results.length, 3))];
     return pick?.urls?.regular || pick?.urls?.small || "";
-  } catch (e) {
+  } catch {
     return "";
   }
 };
 
-const Discover = () => {
-  const { tripData, tripPlan } = useLocalSearchParams();
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const [parsedTripData, setParsedTripData] = useState<any>(null);
-  const [parsedTripPlan, setParsedTripPlan] = useState<any>(null);
-
-  // ── All hooks must be declared before any early return (Rules of Hooks) ──
-
-  const fetchPlaceImage = async (placeName: string) => {
-    const defaultFallback = "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?q=80&w=2071&auto=format&fit=crop";
-    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY;
-
-    if (!placeName || typeof placeName !== "string") return defaultFallback;
-
-    // 1) Prefer Unsplash if key available
-    try {
-      const unsplash = await fetchUnsplashImage(placeName);
-      if (unsplash) return unsplash;
-    } catch (e) {
-      // ignore
-    }
-
-    // 2) Wikipedia fallback
-    try {
-      const cleanName = placeName.split(",")[0].trim().replace(/\s+/g, "_");
-      const wikiRes = await fetch(
-        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanName)}`
-      );
-      if (wikiRes.ok) {
-        const wikiData = await wikiRes.json();
-        const source = wikiData.originalimage?.source || wikiData.thumbnail?.source;
-        if (source) return source;
-      }
-    } catch (error) {
-      console.error("Error fetching Wikipedia fallback image:", error);
-    }
-
-    // 3) Google Places fallback (use only if available)
-    if (apiKey) {
-      try {
-        const response = await fetch(
-          `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
-            placeName
-          )}&key=${apiKey}`
-        );
-
-        const data = await response.json();
-        const place = data.results?.[0];
-        if (place) {
-          const photoRef = place.photos?.[0]?.photo_reference;
-          if (photoRef) {
-            return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photoRef}&key=${apiKey}`;
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching Google Place image:", error);
-      }
-    }
-
-    return defaultFallback;
-  };
-
-  useEffect(() => {
-    if (tripData && tripPlan) {
-      const parsedTrip = JSON.parse(tripPlan as string);
-      setParsedTripData(JSON.parse(tripData as string));
-      // assign parsed plan first
-      setParsedTripPlan(parsedTrip);
-
-      // fetch hotel images in parallel and update once
-      (async () => {
-        try {
-          const hotels = parsedTrip.trip_plan?.hotel?.options || [];
-          if (!hotels.length) return;
-          const hotelImgPromises = hotels.map((h: any) =>
-            (async () => {
-              // prefer existing image_url if provided by the plan
-              if (h.image_url) return h.image_url;
-              const fromPlace = await fetchPlaceImage(h.name);
-              if (fromPlace && fromPlace !== DEFAULT_IMAGE_URL) return fromPlace;
-              const fromUnsplash = await fetchUnsplashImage(`${firstWord(h.name)} hotel`);
-              return fromUnsplash || DEFAULT_IMAGE_URL;
-            })()
-          );
-          const hotelImgs = await Promise.all(hotelImgPromises);
-          setParsedTripPlan((prev: any) => ({
-            ...prev,
-            trip_plan: {
-              ...prev.trip_plan,
-              hotel: {
-                ...prev.trip_plan.hotel,
-                options: (prev.trip_plan.hotel?.options || []).map((h: any, i: number) => ({
-                  ...h,
-                  image_url: hotelImgs[i] || h.image_url || DEFAULT_IMAGE_URL,
-                })),
-              },
-            },
-          }));
-        } catch (e) {
-          console.error("Error fetching hotel images:", e);
-        }
-      })();
-
-      // fetch place images in parallel and update once
-      (async () => {
-        try {
-          const places = parsedTrip.trip_plan?.places_to_visit || [];
-          if (!places.length) return;
-          const placeImgPromises = places.map((p: any) =>
-            (async () => {
-              if (p.image_url) return p.image_url;
-              const fromPlace = await fetchPlaceImage(p.name);
-              if (fromPlace && fromPlace !== DEFAULT_IMAGE_URL) return fromPlace;
-              const fromUnsplash = await fetchUnsplashImage(`${firstWord(p.name)} travel`);
-              return fromUnsplash || DEFAULT_IMAGE_URL;
-            })()
-          );
-          const placeImgs = await Promise.all(placeImgPromises);
-          setParsedTripPlan((prev: any) => ({
-            ...prev,
-            trip_plan: {
-              ...prev.trip_plan,
-              places_to_visit: (prev.trip_plan.places_to_visit || []).map((p: any, i: number) => ({
-                ...p,
-                image_url: placeImgs[i] || p.image_url || DEFAULT_IMAGE_URL,
-              })),
-            },
-          }));
-        } catch (e) {
-          console.error("Error fetching place images:", e);
-        }
-      })();
-    }
-  }, [tripData, tripPlan]);
-
-  if (!parsedTripPlan || !parsedTripData) {
-    return (
-      <View className="flex-1 items-center justify-center">
-        <Text className="text-xl font-outfit-medium text-gray-600">
-          Select a trip to view details
-        </Text>
-      </View>
+// Wikipedia fallback — same pattern as location-details.tsx's fetchPlaceImage.
+// Unsplash's demo key is shared across the whole app (hotels, places,
+// weather, etc.) and rate-limits fast, at which point every card here would
+// otherwise fall back to the exact same DEFAULT_IMAGE_URL. Wikipedia has a
+// real, distinct image for every continent/country/city name and isn't
+// subject to that shared limit.
+const fetchWikipediaImage = async (name: string): Promise<string> => {
+  try {
+    const cleanName = name.split(",")[0].trim().replace(/\s+/g, "_");
+    const res = await fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanName)}`
     );
+    if (!res.ok) return "";
+    const data = await res.json();
+    return data.originalimage?.source || data.thumbnail?.source || "";
+  } catch {
+    return "";
   }
+};
 
-  // SMART BOOKING FUNCTION — builds real URLs
-  const isPakistanTrip = () => {
-    const flight = parsedTripPlan?.trip_plan?.flight_details;
-    const from = (flight?.departure_city || "").toLowerCase();
-    const to = (flight?.arrival_city || parsedTripPlan?.trip_plan?.location || "").toLowerCase();
-    return from.includes("pak") || from.includes("pakistan") || to.includes("pak") || to.includes("pakistan");
+const fetchInspirationImage = async (name: string, query: string): Promise<string> => {
+  const fromUnsplash = await fetchUnsplashImage(query);
+  if (fromUnsplash) return fromUnsplash;
+  const fromWiki = await fetchWikipediaImage(name);
+  if (fromWiki) return fromWiki;
+  return DEFAULT_IMAGE_URL;
+};
+
+type Place = { name: string; tagline: string; query: string; lat: number; lng: number };
+type Country = { name: string; emoji: string; query: string; places: Place[] };
+type Continent = { name: string; emoji: string; query: string; countries: Country[] };
+
+// Curated Continent → Country → Place hierarchy. Coordinates are fixed here
+// (rather than geocoded on tap) so weather/map features downstream always
+// have a real lat/lng, even in real (non-demo) mode where generate-trip.tsx
+// only re-geocodes a missing coordinate in demo mode.
+const CONTINENTS: Continent[] = [
+  {
+    name: "Asia",
+    emoji: "🏯",
+    query: "Asia travel landmark",
+    countries: [
+      {
+        name: "Japan",
+        emoji: "🇯🇵",
+        query: "Japan landmark travel",
+        places: [
+          { name: "Tokyo, Japan", tagline: "Neon streets, ancient temples", query: "Tokyo Japan travel", lat: 35.6762, lng: 139.6503 },
+          { name: "Kyoto, Japan", tagline: "Temples & cherry blossoms", query: "Kyoto Japan travel", lat: 35.0116, lng: 135.7681 },
+          { name: "Osaka, Japan", tagline: "Street food capital", query: "Osaka Japan travel", lat: 34.6937, lng: 135.5023 },
+        ],
+      },
+      {
+        name: "UAE",
+        emoji: "🇦🇪",
+        query: "UAE landmark travel",
+        places: [
+          { name: "Dubai, UAE", tagline: "Desert luxury & skyline", query: "Dubai skyline travel", lat: 25.2048, lng: 55.2708 },
+          { name: "Abu Dhabi, UAE", tagline: "Grand mosques & culture", query: "Abu Dhabi travel", lat: 24.4539, lng: 54.3773 },
+        ],
+      },
+      {
+        name: "Thailand",
+        emoji: "🇹🇭",
+        query: "Thailand landmark travel",
+        places: [
+          { name: "Bangkok, Thailand", tagline: "Street food & golden temples", query: "Bangkok Thailand travel", lat: 13.7563, lng: 100.5018 },
+          { name: "Phuket, Thailand", tagline: "Beaches & island hopping", query: "Phuket Thailand travel", lat: 7.8804, lng: 98.3923 },
+          { name: "Chiang Mai, Thailand", tagline: "Mountains & lantern festivals", query: "Chiang Mai Thailand travel", lat: 18.7883, lng: 98.9853 },
+        ],
+      },
+      {
+        name: "Pakistan",
+        emoji: "🇵🇰",
+        query: "Pakistan landmark travel",
+        places: [
+          { name: "Hunza Valley, Pakistan", tagline: "Himalayan peaks & valleys", query: "Hunza Valley Pakistan travel", lat: 36.32, lng: 74.65 },
+          { name: "Lahore, Pakistan", tagline: "Mughal history & food streets", query: "Lahore Pakistan travel", lat: 31.5497, lng: 74.3436 },
+          { name: "Skardu, Pakistan", tagline: "Lakes & mountain treks", query: "Skardu Pakistan travel", lat: 35.2971, lng: 75.6333 },
+        ],
+      },
+      {
+        name: "Indonesia",
+        emoji: "🇮🇩",
+        query: "Indonesia landmark travel",
+        places: [
+          { name: "Bali, Indonesia", tagline: "Beaches & rice terraces", query: "Bali Indonesia travel", lat: -8.4095, lng: 115.1889 },
+          { name: "Jakarta, Indonesia", tagline: "Bustling capital city", query: "Jakarta Indonesia travel", lat: -6.2088, lng: 106.8456 },
+        ],
+      },
+      {
+        name: "Turkey",
+        emoji: "🇹🇷",
+        query: "Turkey landmark travel",
+        places: [
+          { name: "Istanbul, Turkey", tagline: "Where Europe meets Asia", query: "Istanbul Turkey travel", lat: 41.0082, lng: 28.9784 },
+          { name: "Cappadocia, Turkey", tagline: "Hot air balloons & cave hotels", query: "Cappadocia Turkey travel", lat: 38.6431, lng: 34.8289 },
+        ],
+      },
+      {
+        name: "Maldives",
+        emoji: "🇲🇻",
+        query: "Maldives landmark travel",
+        places: [
+          { name: "Malé, Maldives", tagline: "Overwater villas & clear seas", query: "Maldives beach travel", lat: 4.1755, lng: 73.5093 },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Europe",
+    emoji: "🏰",
+    query: "Europe travel landmark",
+    countries: [
+      {
+        name: "France",
+        emoji: "🇫🇷",
+        query: "France landmark travel",
+        places: [
+          { name: "Paris, France", tagline: "The City of Light", query: "Paris Eiffel Tower travel", lat: 48.8566, lng: 2.3522 },
+          { name: "Nice, France", tagline: "French Riviera coastline", query: "Nice France travel", lat: 43.7102, lng: 7.262 },
+          { name: "Lyon, France", tagline: "Culinary capital", query: "Lyon France travel", lat: 45.764, lng: 4.8357 },
+        ],
+      },
+      {
+        name: "Italy",
+        emoji: "🇮🇹",
+        query: "Italy landmark travel",
+        places: [
+          { name: "Rome, Italy", tagline: "Ancient history at every corner", query: "Rome Italy travel", lat: 41.9028, lng: 12.4964 },
+          { name: "Venice, Italy", tagline: "Canals & gondolas", query: "Venice Italy travel", lat: 45.4408, lng: 12.3155 },
+          { name: "Florence, Italy", tagline: "Renaissance art & architecture", query: "Florence Italy travel", lat: 43.7696, lng: 11.2558 },
+        ],
+      },
+      {
+        name: "United Kingdom",
+        emoji: "🇬🇧",
+        query: "UK landmark travel",
+        places: [
+          { name: "London, UK", tagline: "Royal history, modern pulse", query: "London UK travel", lat: 51.5072, lng: -0.1276 },
+          { name: "Edinburgh, UK", tagline: "Castles & festivals", query: "Edinburgh Scotland travel", lat: 55.9533, lng: -3.1883 },
+        ],
+      },
+      {
+        name: "Greece",
+        emoji: "🇬🇷",
+        query: "Greece landmark travel",
+        places: [
+          { name: "Santorini, Greece", tagline: "Whitewashed cliffside views", query: "Santorini Greece travel", lat: 36.3932, lng: 25.4615 },
+          { name: "Athens, Greece", tagline: "Cradle of ancient civilization", query: "Athens Greece travel", lat: 37.9838, lng: 23.7275 },
+        ],
+      },
+      {
+        name: "Spain",
+        emoji: "🇪🇸",
+        query: "Spain landmark travel",
+        places: [
+          { name: "Barcelona, Spain", tagline: "Gaudí architecture & beaches", query: "Barcelona Spain travel", lat: 41.3874, lng: 2.1686 },
+          { name: "Madrid, Spain", tagline: "Art, tapas & nightlife", query: "Madrid Spain travel", lat: 40.4168, lng: -3.7038 },
+        ],
+      },
+    ],
+  },
+  {
+    name: "North America",
+    emoji: "🗽",
+    query: "North America travel landmark",
+    countries: [
+      {
+        name: "USA",
+        emoji: "🇺🇸",
+        query: "USA landmark travel",
+        places: [
+          { name: "New York, USA", tagline: "The city that never sleeps", query: "New York City travel", lat: 40.7128, lng: -74.006 },
+          { name: "Los Angeles, USA", tagline: "Beaches & Hollywood", query: "Los Angeles travel", lat: 34.0522, lng: -118.2437 },
+          { name: "Miami, USA", tagline: "Sun, sand & nightlife", query: "Miami travel", lat: 25.7617, lng: -80.1918 },
+        ],
+      },
+      {
+        name: "Canada",
+        emoji: "🇨🇦",
+        query: "Canada landmark travel",
+        places: [
+          { name: "Toronto, Canada", tagline: "Diverse city skyline", query: "Toronto Canada travel", lat: 43.6511, lng: -79.347 },
+          { name: "Banff, Canada", tagline: "Rocky Mountain lakes", query: "Banff Canada travel", lat: 51.1784, lng: -115.5708 },
+        ],
+      },
+    ],
+  },
+  {
+    name: "South America",
+    emoji: "🌴",
+    query: "South America travel landmark",
+    countries: [
+      {
+        name: "Brazil",
+        emoji: "🇧🇷",
+        query: "Brazil landmark travel",
+        places: [
+          { name: "Rio de Janeiro, Brazil", tagline: "Beaches & Christ the Redeemer", query: "Rio de Janeiro travel", lat: -22.9068, lng: -43.1729 },
+        ],
+      },
+      {
+        name: "Peru",
+        emoji: "🇵🇪",
+        query: "Peru landmark travel",
+        places: [
+          { name: "Cusco, Peru", tagline: "Gateway to Machu Picchu", query: "Cusco Peru travel", lat: -13.532, lng: -71.9675 },
+        ],
+      },
+      {
+        name: "Argentina",
+        emoji: "🇦🇷",
+        query: "Argentina landmark travel",
+        places: [
+          { name: "Buenos Aires, Argentina", tagline: "Tango & European flair", query: "Buenos Aires travel", lat: -34.6037, lng: -58.3816 },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Africa",
+    emoji: "🌍",
+    query: "Africa travel landscape",
+    countries: [
+      {
+        name: "Egypt",
+        emoji: "🇪🇬",
+        query: "Egypt landmark travel",
+        places: [
+          { name: "Cairo, Egypt", tagline: "Pyramids & ancient wonders", query: "Cairo Egypt travel", lat: 30.0444, lng: 31.2357 },
+          { name: "Luxor, Egypt", tagline: "Valley of the Kings", query: "Luxor Egypt travel", lat: 25.6872, lng: 32.6396 },
+        ],
+      },
+      {
+        name: "Morocco",
+        emoji: "🇲🇦",
+        query: "Morocco landmark travel",
+        places: [
+          { name: "Marrakech, Morocco", tagline: "Souks & desert gateway", query: "Marrakech Morocco travel", lat: 31.6295, lng: -7.9811 },
+        ],
+      },
+      {
+        name: "South Africa",
+        emoji: "🇿🇦",
+        query: "South Africa landmark travel",
+        places: [
+          { name: "Cape Town, South Africa", tagline: "Table Mountain & coastline", query: "Cape Town travel", lat: -33.9249, lng: 18.4241 },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Oceania",
+    emoji: "🏝️",
+    query: "Oceania travel landscape",
+    countries: [
+      {
+        name: "Australia",
+        emoji: "🇦🇺",
+        query: "Australia landmark travel",
+        places: [
+          { name: "Sydney, Australia", tagline: "Opera House & harbour views", query: "Sydney Australia travel", lat: -33.8688, lng: 151.2093 },
+          { name: "Melbourne, Australia", tagline: "Coffee culture & laneways", query: "Melbourne Australia travel", lat: -37.8136, lng: 144.9631 },
+        ],
+      },
+      {
+        name: "New Zealand",
+        emoji: "🇳🇿",
+        query: "New Zealand landmark travel",
+        places: [
+          { name: "Queenstown, New Zealand", tagline: "Adventure capital", query: "Queenstown New Zealand travel", lat: -45.0312, lng: 168.6626 },
+        ],
+      },
+    ],
+  },
+];
+
+type Step = "continent" | "country" | "place";
+
+const Discover = () => {
+  const router = useRouter();
+  const { setTripData } = useContext(CreateTripContext);
+  const canGenerateTrip = usePremiumStore(selectCanGenerateTrip);
+  const [step, setStep] = useState<Step>("continent");
+  const [selectedContinent, setSelectedContinent] = useState<Continent | null>(null);
+  const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
+  const [images, setImages] = useState<Record<string, string>>({});
+  const [paywallVisible, setPaywallVisible] = useState(false);
+
+  // Fetch images lazily for whichever list is currently visible, and cache
+  // by name so going back a step doesn't re-fetch.
+  useEffect(() => {
+    let cancelled = false;
+
+    const entries: Array<{ name: string; query: string }> =
+      step === "continent"
+        ? CONTINENTS.map((c) => ({ name: c.name, query: c.query }))
+        : step === "country"
+        ? (selectedContinent?.countries || []).map((c) => ({ name: c.name, query: c.query }))
+        : (selectedCountry?.places || []).map((p) => ({ name: p.name, query: p.query }));
+
+    const missing = entries.filter((e) => !images[e.name]);
+    if (!missing.length) return;
+
+    (async () => {
+      const fetched = await Promise.all(
+        missing.map(async (e) => [e.name, await fetchInspirationImage(e.name, e.query)] as const)
+      );
+      if (cancelled) return;
+      setImages((prev) => ({ ...prev, ...Object.fromEntries(fetched) }));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [step, selectedContinent, selectedCountry]);
+
+  const goBack = () => {
+    if (step === "place") {
+      setStep("country");
+      setSelectedCountry(null);
+    } else if (step === "country") {
+      setStep("continent");
+      setSelectedContinent(null);
+    }
   };
 
-  const handleBooking = async (type: "flight" | "bus", platform?: string) => {
-    const flight = parsedTripPlan?.trip_plan?.flight_details;
-    const from = flight?.departure_city || "";
-    const to = flight?.arrival_city || parsedTripPlan?.trip_plan?.location || "";
-
-    let url = "";
-
-    if (type === "flight") {
-      const fromEnc = encodeURIComponent(from);
-      const toEnc = encodeURIComponent(to);
-      // Prefer Emirates booking. Use a site-restricted Google search to find matching Emirates routes
-      // when we have origin/destination; otherwise open Emirates homepage.
-      // Add utm_source for tracking
-      const emiratesHome = `https://www.emirates.com/?utm_source=chatgpt.com`;
-      const qatarHome = `https://www.qatarairways.com/?utm_source=chatgpt.com`;
-      url = from && to
-        ? `https://www.google.com/search?q=site:emirates.com+Flights+from+${fromEnc}+to+${toEnc}`
-        : emiratesHome;
-      // If airline is Qatar, prefer linking to Qatar site
-      const airline = (parsedTripPlan?.trip_plan?.flight_details?.airline || "").toLowerCase();
-      if (!from || !to) {
-        if (airline.includes("qatar")) url = qatarHome;
-        else if (airline.includes("emirates")) url = emiratesHome;
-      }
-    } else if (type === "bus") {
-      const fromEnc = encodeURIComponent(from);
-      const toEnc = encodeURIComponent(to);
-      // Only show Pakistan-specific bus providers when trip involves Pakistan
-      if (!isPakistanTrip()) {
-        // Non-Pakistan: prefer global providers
-        if (platform === "flixbus") {
-          url = `https://global.flixbus.com/bus-routes`;
-        } else if (platform === "redbus") {
-          url = `https://www.redbus.com`;
-        } else {
-          url = `https://www.google.com/search?q=online+bus+booking+${fromEnc}+to+${toEnc}`;
-        }
-      } else {
-        // Pakistan trip: prefer local sites
-        if (platform === "daewoo") {
-          url = `https://daewoo.com.pk/?utm_source=chatgpt.com`;
-        } else if (platform === "faisal") {
-          url = `https://faisalmovers.com/booking/?utm_source=chatgpt.com`;
-        } else {
-          // default to bookme for Pakistan
-          url = `https://bookme.pk/?utm_source=chatgpt.com`;
-        }
-      }
+  const handleExplore = (place: Place) => {
+    if (!canGenerateTrip) {
+      setPaywallVisible(true);
+      return;
     }
 
-    try {
-      //  Directly open URL — canOpenURL fails on Android for HTTPS links
-      await Linking.openURL(url);
-    } catch (error) {
-      console.error("Booking URL error:", error);
-      // Fallback: open Google search
-      const fallback = `https://www.google.com/search?q=online+bus+booking+${encodeURIComponent(from)}+to+${encodeURIComponent(to)}`;
-      try {
-        await Linking.openURL(fallback);
-      } catch (e) {
-        console.error("Fallback booking URL error:", e);
-      }
-    }
+    setTripData([
+      {
+        locationInfo: {
+          name: place.name,
+          coordinates: { lat: place.lat, lng: place.lng },
+          imageUrl: images[place.name] || null,
+        },
+      },
+    ]);
+    router.push("/create-trip/select-traveler");
   };
 
-  const handleOpenMap = (latitude: number, longitude: number) => {
-    const url = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-    Linking.openURL(url);
-  };
+  const cards =
+    step === "continent"
+      ? CONTINENTS.map((c) => ({ key: c.name, emoji: c.emoji, title: c.name, subtitle: `${c.countries.length} countries`, onPress: () => { setSelectedContinent(c); setStep("country"); } }))
+      : step === "country"
+      ? (selectedContinent?.countries || []).map((c) => ({ key: c.name, emoji: c.emoji, title: c.name, subtitle: `${c.places.length} places`, onPress: () => { setSelectedCountry(c); setStep("place"); } }))
+      : (selectedCountry?.places || []).map((p) => ({ key: p.name, emoji: "📍", title: p.name.split(",")[0], subtitle: p.tagline, onPress: () => handleExplore(p) }));
 
+  const title =
+    step === "continent"
+      ? "Discover"
+      : step === "country"
+      ? selectedContinent?.name || "Countries"
+      : selectedCountry?.name || "Places";
 
+  const subtitle =
+    step === "continent"
+      ? "Where in the world do you want to go?"
+      : step === "country"
+      ? "Pick a country"
+      : "Pick a place to start planning";
 
   return (
-    <PremiumGate feature="discover_places">
     <SafeAreaView className="flex-1 bg-white" edges={["top"]}>
-      {/* Back Button Header */}
-      <View className="px-6 pb-0 flex-row items-center" style={{ paddingTop: insets.top }}>
-        <TouchableOpacity onPress={() => router.back()} className="mr-3">
-          <Ionicons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text className="text-xl font-outfit-bold">Location Details</Text>
-      </View>
-
       <ScrollView
-        className="flex-1 bg-white"
-        contentContainerStyle={{
-          padding: 24,
-          paddingTop: 20,
-          paddingBottom: 20,
-        }}
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ padding: 24, paddingBottom: 32 }}
       >
-        {/* ── Real-World Photo Gallery ── */}
-        <LocationPhotoGallery
-          locationName={parsedTripPlan?.trip_plan?.location || ""}
-          googleApiKey={process.env.EXPO_PUBLIC_GOOGLE_MAP_KEY}
-          useRandomPhotos={true}
-          style={{ marginBottom: 20 }}
-        />
-
-        {/* Trip Overview */}
-        <View className="bg-purple-50 p-4 rounded-xl mb-6">
-          <Text className="font-outfit-bold text-lg mb-2">Trip Overview</Text>
-          <Text className="font-outfit text-gray-600">
-            Duration: {parsedTripPlan.trip_plan.duration}
-          </Text>
-          <Text className="font-outfit text-gray-600">
-            Budget: {parsedTripPlan.trip_plan.budget}
-          </Text>
-
+        <View className="flex-row items-center mb-1">
+          {step !== "continent" && (
+            <TouchableOpacity onPress={goBack} className="mr-2">
+              <Ionicons name="arrow-back" size={22} color="#7c3aed" />
+            </TouchableOpacity>
+          )}
+          <Text className="text-3xl font-outfit-bold text-purple-700">{title}</Text>
         </View>
+        <Text className="text-gray-500 font-outfit-medium mb-6">{subtitle}</Text>
 
-        {/* Flight Details */}
-        <View className="mb-8">
-          <Text className="text-2xl font-outfit-bold mb-4">Flight Details</Text>
-          <View className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-            <View className="flex-row justify-between items-center mb-4">
-              <View>
-                <Text className="font-outfit-bold text-lg">
-                  {parsedTripPlan.trip_plan.flight_details?.departure_city}
-                </Text>
-                <Text className="font-outfit text-gray-600">
-                  {parsedTripPlan.trip_plan.flight_details?.departure_date}{" "}
-                  {parsedTripPlan.trip_plan.flight_details?.departure_time}
-                </Text>
-              </View>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" }}>
+          {cards.map((card) => {
+            const imageUrl = images[card.key];
+            return (
+              <TouchableOpacity
+                key={card.key}
+                onPress={card.onPress}
+                activeOpacity={0.85}
+                style={{
+                  width: CARD_WIDTH,
+                  height: 190,
+                  borderRadius: 18,
+                  overflow: "hidden",
+                  marginBottom: 14,
+                  backgroundColor: "#f3f4f6",
+                }}
+              >
+                {imageUrl ? (
+                  <Image
+                    source={{ uri: imageUrl }}
+                    style={{ width: "100%", height: "100%" }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View className="flex-1 items-center justify-center">
+                    <ActivityIndicator size="small" color="#8b5cf6" />
+                  </View>
+                )}
 
-              <Ionicons name="airplane" size={24} color="#8b5cf6" />
-
-              <View>
-                <Text className="font-outfit-bold text-lg">
-                  {parsedTripPlan.trip_plan.flight_details?.arrival_city}
-                </Text>
-                <Text className="font-outfit text-gray-600">
-                  {parsedTripPlan.trip_plan.flight_details?.arrival_date}{" "}
-                  {parsedTripPlan.trip_plan.flight_details?.arrival_time}
-                </Text>
-              </View>
-            </View>
-
-            <View className="border-t border-gray-200 pt-4">
-              <Text className="font-outfit text-gray-600">
-                Airline: {parsedTripPlan.trip_plan.flight_details?.airline}
-              </Text>
-              <Text className="font-outfit text-gray-600">
-                Flight: {parsedTripPlan.trip_plan.flight_details?.flight_number}
-              </Text>
-              <Text className="font-outfit text-gray-600">
-                Price: {parsedTripPlan.trip_plan.flight_details?.price}
-              </Text>
-
-              {/*  REAL FLIGHT BOOKING — Providers */}
-              <View style={{ marginTop: 16, gap: 10 }}>
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <TouchableOpacity
-                    onPress={async () => {
-                      try {
-                        await Linking.openURL("https://www.onetravel.com/booknow/flights/destinations/country?country-code=PK&fpaffiliate=ot-googledesktop-global-destination&fpsub=Destination-Destinations_Intl_Exact_ATLAS_Global_SP&utm_term=airline%20pakistan&fpprice=&refid=&utm_campaign=&utm_source={google}&utm_medium={cpc}&device=c&campaignid=21754998913&adgroupid=168195431259&gad_source=1&gad_campaignid=21754998913&gbraid=0AAAAA-POqERIDPfqQgVXIBuyq7EIAXaA0&gclid=Cj0KCQjwi8nRBhDhARIsAHZf_paaBlEvdhTlukCBJpj3n1CV3Ma74kMt-1UZO4qtyMIkbHzVHGNb1v0aAlAvEALw_wcB");
-                      } catch (e) {
-                        Alert.alert("Error", "Unable to open OneTravel.");
-                      }
-                    }}
-                    style={{
-                      flex: 1,
-                      backgroundColor: "#1f2937",
-                      borderRadius: 12,
-                      paddingVertical: 14,
-                      alignItems: "center",
-                    }}
-                  >
-                    <Ionicons name="airplane" size={18} color="#fff" />
-                    <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>OneTravel</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={async () => {
-                      try {
-                        await Linking.openURL("https://www.skyscanner.pk/pk/en-gb/pkr/?adgroupid=146649109183&associateID=SEM_FLI_19465_00000&campaign_id=19965444611&gad_campaignid=19965444611&gad_source=1&gbraid=0AAAAAD3oWFgwSfdLRvX7nhbWhXqwetOF3&gclid=Cj0KCQjwi8nRBhDhARIsAHZf_pblybeMzyaU5MANTxVTYmE2mtC9g2b_1PMvJ3y8OA4EWp36OEXHbgUaAqtAEALw_wcB&gclsrc=aw.ds&keyword_id=kwd-18709060&previousCultureSource=URL&redirectedFrom=www.skyscanner.net&utm_campaign=PK-Flights-Search-EN-Generics&utm_medium=cpc&utm_source=google&utm_term=flight+booking");
-                      } catch (e) {
-                        Alert.alert("Error", "Unable to open Skyscanner.");
-                      }
-                    }}
-                    style={{
-                      flex: 1,
-                      backgroundColor: "#00a699",
-                      borderRadius: 12,
-                      paddingVertical: 14,
-                      alignItems: "center",
-                    }}
-                  >
-                    <Ionicons name="airplane" size={18} color="#fff" />
-                    <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Skyscanner</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Direct Airline Links: Emirates & Qatar */}
-                <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
-                  <TouchableOpacity
-                    onPress={async () => {
-                      try {
-                        await Linking.openURL("https://www.emirates.com/?utm_source=chatgpt.com");
-                      } catch (e) {
-                        Alert.alert("Error", "Unable to open Emirates website.");
-                      }
-                    }}
-                    style={{
-                      flex: 1,
-                      backgroundColor: "#111827",
-                      borderRadius: 12,
-                      paddingVertical: 14,
-                      alignItems: "center",
-                    }}
-                  >
-                    <Ionicons name="airplane" size={18} color="#fff" />
-                    <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Emirates</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={async () => {
-                      try {
-                        await Linking.openURL("https://www.qatarairways.com/?utm_source=chatgpt.com");
-                      } catch (e) {
-                        Alert.alert("Error", "Unable to open Qatar Airways website.");
-                      }
-                    }}
-                    style={{
-                      flex: 1,
-                      backgroundColor: "#6d28d9",
-                      borderRadius: 12,
-                      paddingVertical: 14,
-                      alignItems: "center",
-                    }}
-                  >
-                    <Ionicons name="airplane" size={18} color="#fff" />
-                    <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Qatar Airways</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <TouchableOpacity
-                  onPress={async () => {
-                    try {
-                      // PIA booking — add utm_source
-                      await Linking.openURL("https://bookme.pk/pakistan-international-airlines?utm_source=chatgpt.com");
-                    } catch (e) {
-                      Alert.alert("Error", "Unable to open PIA booking site.");
-                    }
-                  }}
+                <View
                   style={{
-                    backgroundColor: "#ef4444",
-                    borderRadius: 12,
-                    paddingVertical: 14,
-                    marginTop: 10,
-                    alignItems: "center",
+                    position: "absolute",
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    padding: 10,
+                    backgroundColor: "rgba(0,0,0,0.45)",
                   }}
                 >
-                  <Ionicons name="airplane" size={18} color="#fff" />
-                  <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16, marginTop: 6 }}>PIA</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* ─────────────── BUS BOOKING SECTION ─────────────── */}
-        <View className="mb-8">
-          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16, gap: 8 }}>
-            <FontAwesome5 name="bus" size={22} color="#7c3aed" />
-            <Text className="text-2xl font-outfit-bold">Book Bus Seat</Text>
-          </View>
-
-          <View style={{ backgroundColor: "#f5f3ff", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#ddd6fe" }}>
-            <Text style={{ fontFamily: "outfit", color: "#4b5563", marginBottom: 12, fontSize: 14 }}>
-              📍 From: {parsedTripPlan.trip_plan.flight_details?.departure_city || "Your City"}{"  ➜  "}
-              {parsedTripPlan.trip_plan.flight_details?.arrival_city || parsedTripPlan.trip_plan.location}
-            </Text>
-
-            {/* Pakistan Bus Options (shown only when trip involves Pakistan) */}
-            {isPakistanTrip() ? (
-              <>
-                <Text style={{ fontWeight: "700", marginBottom: 10, color: "#6d28d9" }}>🇵🇰 Pakistan</Text>
-                <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
-                  <TouchableOpacity
-                    onPress={async () => {
-                      try {
-                        await Linking.openURL("https://daewoo.com.pk/?utm_source=chatgpt.com");
-                      } catch (e) {
-                        Alert.alert("Error", "Unable to open Daewoo website.");
-                      }
-                    }}
-                    style={{
-                      flex: 1,
-                      backgroundColor: "#0b5efd",
-                      borderRadius: 12,
-                      paddingVertical: 14,
-                      alignItems: "center",
-                    }}
+                  <Text
+                    style={{ color: "#fff", fontFamily: "outfit-bold", fontSize: 14 }}
+                    numberOfLines={1}
                   >
-                    <FontAwesome5 name="bus" size={18} color="#fff" />
-                    <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Daewoo</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={async () => {
-                      try {
-                        await Linking.openURL("https://faisalmovers.com/booking/?utm_source=chatgpt.com");
-                      } catch (e) {
-                        Alert.alert("Error", "Unable to open Faisal Movers booking page.");
-                      }
-                    }}
-                    style={{
-                      flex: 1,
-                      backgroundColor: "#0369a1",
-                      borderRadius: 12,
-                      paddingVertical: 14,
-                      alignItems: "center",
-                    }}
+                    {card.title}
+                  </Text>
+                  <Text
+                    style={{ color: "#e5e7eb", fontSize: 11, marginTop: 2 }}
+                    numberOfLines={1}
                   >
-                    <FontAwesome5 name="ticket-alt" size={18} color="#fff" />
-                    <Text style={{ color: "#fff", fontWeight: "700", marginTop: 6, fontSize: 13 }}>Faisal Movers</Text>
-                  </TouchableOpacity>
+                    {card.subtitle}
+                  </Text>
                 </View>
-              </>
-            ) : (
-              <Text style={{ color: "#6b7280", marginBottom: 12 }}>Bus booking options shown for Pakistan trips only.</Text>
-            )}
-          </View>
-        </View>
 
-        {/* Hotels Section */}
-        <View className="mb-8">
-          <Text className="text-2xl font-outfit-bold mb-4">Hotel Options</Text>
-          {(parsedTripPlan.trip_plan.hotel?.options || []).length === 0 ? (
-            <Text className="font-outfit text-gray-500">
-              No hotel options available for this trip.
-            </Text>
-          ) : (
-            parsedTripPlan.trip_plan.hotel.options.map(
-              (hotel: any, index: number) => (
                 <View
-                  key={index}
-                  className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100"
+                  style={{
+                    position: "absolute",
+                    top: 8,
+                    right: 8,
+                    backgroundColor: "rgba(255,255,255,0.9)",
+                    borderRadius: 999,
+                    padding: 6,
+                  }}
                 >
-                  <Image
-                    source={{ uri: hotel.image_url || DEFAULT_IMAGE_URL }}
-                    className="w-full h-48 rounded-xl mb-4"
-                  />
-                  <Text className="font-outfit-bold text-lg">{hotel.name}</Text>
-                  <Text className="font-outfit text-gray-600 mb-2">
-                    {hotel.address}
-                  </Text>
-                  <Text className="font-outfit text-gray-600">
-                    Price: {hotel.price}
-                  </Text>
-                  <Text className="font-outfit text-gray-600">
-                    Rating: {hotel.rating} ⭐
-                  </Text>
-                  <Text className="font-outfit text-gray-600 mt-2">
-                    {hotel.description}
-                  </Text>
-
-                  {hotel.geo_coordinates && (
-                    <CustomButton
-                      title="View on Map"
-                      onPress={() =>
-                        handleOpenMap(
-                          hotel.geo_coordinates.latitude,
-                          hotel.geo_coordinates.longitude
-                        )
-                      }
-                      className="mt-4"
-                    />
-                  )}
+                  <Text style={{ fontSize: 14 }}>{card.emoji}</Text>
                 </View>
-              )
-            )
-          )}
-        </View>
-
-        {/* Places to Visit */}
-        <View className="mb-8">
-          <Text className="text-2xl font-outfit-bold mb-4">
-            Places to Visit
-          </Text>
-
-          {(parsedTripPlan.trip_plan.places_to_visit || []).length === 0 ? (
-            <Text className="font-outfit text-gray-500">
-              No places to visit available for this trip.
-            </Text>
-          ) : (
-            parsedTripPlan.trip_plan.places_to_visit.map(
-              (place: any, index: number) => (
-                <View
-                  key={index}
-                  className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100"
-                >
-                  <Image
-                    source={{ uri: place.image_url || DEFAULT_IMAGE_URL }}
-                    className="w-full h-48 rounded-xl mb-4"
-                  />
-                  <Text className="font-outfit-bold text-lg">{place.name}</Text>
-                  <Text className="font-outfit text-gray-600 mb-2">
-                    {place.details}
-                  </Text>
-                  <Text className="font-outfit text-gray-600">
-                    Ticket Price: {place.ticket_price}
-                  </Text>
-                  <Text className="font-outfit text-gray-600">
-                    Time to Travel: {place.time_to_travel}
-                  </Text>
-
-                  {place.geo_coordinates && (
-                    <CustomButton
-                      title="View on Map"
-                      onPress={() =>
-                        handleOpenMap(
-                          place.geo_coordinates.latitude,
-                          place.geo_coordinates.longitude
-                        )
-                      }
-                      className="mt-4"
-                    />
-                  )}
-                </View>
-              )
-            )
-          )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </ScrollView>
+
+      <PremiumPaywall
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        feature="unlimited_trips"
+      />
     </SafeAreaView>
-    </PremiumGate>
   );
 };
 
