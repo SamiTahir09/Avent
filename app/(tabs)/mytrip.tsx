@@ -22,13 +22,19 @@ import {
   cacheTripsSnapshot,
   getCachedTripsSnapshot,
 } from "@/services/OfflineSync";
+import { getLocalTrips } from "@/services/LocalFreeTrial";
+import { usePremiumStore, selectCanGenerateTrip } from "@/store/premiumStore";
+import PremiumPaywall from "@/components/PremiumPaywall";
 
 const MyTrip = () => {
   const [userTrips, setUserTrips] = useState<any[]>([]);
   const user = auth.currentUser;
   const [loading, setLoading] = useState(false);
+  const [paywallVisible, setPaywallVisible] = useState(false);
   const router = useRouter();
   const { setTripData } = useContext(CreateTripContext);
+  const canGenerateTrip = usePremiumStore(selectCanGenerateTrip);
+  const isPremium = usePremiumStore((s) => s.premium);
 
   useEffect(() => {
     user && getMyTrips();
@@ -58,6 +64,11 @@ const MyTrip = () => {
       return;
     }
 
+    // Free-tier trips never touch Firestore (see services/LocalFreeTrial.ts),
+    // so they're read from AsyncStorage and merged in alongside whatever's
+    // in the cloud — this keeps them visible even after the user upgrades.
+    const localTrips = user?.uid ? await getLocalTrips(user.uid) : [];
+
     try {
       const q = query(
         collection(db, "UserTrips"),
@@ -76,6 +87,7 @@ const MyTrip = () => {
       setUserTrips([
         ...stillPending.map((t) => ({ ...t, pendingSync: true })),
         ...trips,
+        ...localTrips,
       ]);
 
       if (user?.email) await cacheTripsSnapshot(user.email, trips);
@@ -88,6 +100,7 @@ const MyTrip = () => {
       setUserTrips([
         ...pendingTrips.map((t) => ({ ...t, pendingSync: true })),
         ...cachedTrips,
+        ...localTrips,
       ]);
     } finally {
       setLoading(false);
@@ -105,6 +118,10 @@ const MyTrip = () => {
         </Text>
         <TouchableOpacity
           onPress={() => {
+            if (!canGenerateTrip) {
+              setPaywallVisible(true);
+              return;
+            }
             setTripData([]);
             router.push("/create-trip/search-place");
           }}
@@ -112,12 +129,30 @@ const MyTrip = () => {
           <Ionicons name="add-circle" size={40} color="#8b5cf6" />
         </TouchableOpacity>
       </View>
+
+      {!isPremium && (
+        <TouchableOpacity
+          onPress={() => router.push("/premium")}
+          className="flex-row items-center justify-center bg-purple-600 rounded-full py-3 mt-4"
+          style={{ gap: 8 }}
+        >
+          <Ionicons name="rocket-outline" size={18} color="#fff" />
+          <Text className="font-outfit-bold text-white text-base">
+            Upgrade Plan
+          </Text>
+        </TouchableOpacity>
+      )}
       {loading && <ActivityIndicator size="large" color="#8b5cf6" />}
       {userTrips?.length == 0 ? (
         <StartNewTripCard />
       ) : (
         <UserTripList userTrips={userTrips} />
       )}
+      <PremiumPaywall
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        feature="unlimited_trips"
+      />
     </ScrollView>
   );
 };

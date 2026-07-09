@@ -17,6 +17,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from "@expo/vector-icons";
 import WeatherService from "@/services/WeatherService";
 import type { WeatherInfo } from "@/services/WeatherService";
+import PremiumGate from "@/components/PremiumGate";
 
 const { width, height } = Dimensions.get("window");
 
@@ -333,6 +334,7 @@ export default function WeatherOutfitScreen() {
   const isMen = activeTab === "men";
 
   return (
+    <PremiumGate feature="smart_outfit">
     <View style={{ flex: 1, backgroundColor: "#080818" }}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
@@ -531,6 +533,7 @@ export default function WeatherOutfitScreen() {
         </Animated.View>
       </ScrollView>
     </View>
+    </PremiumGate>
   );
 }
 

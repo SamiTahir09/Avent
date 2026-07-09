@@ -17,6 +17,7 @@ import type { WeatherInfo } from "@/services/WeatherService";
 import WeatherAdvice from "@/components/WeatherAdvice";
 import AIPackingSuggestions from "@/components/AIPackingSuggestions";
 import { parseCoordinates } from "@/utils/coordinates";
+import PremiumGate from "@/components/PremiumGate";
 
 const DEFAULT_IMAGE_URL =
     "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?q=80&w=2071&auto=format&fit=crop";
@@ -160,6 +161,7 @@ const WeatherDetailsScreen = () => {
     }, [coordinates?.lat, coordinates?.lng]);
 
     return (
+        <PremiumGate feature="weather_forecast">
         <SafeAreaView className="flex-1 bg-white">
             <View className="px-6 pb-3 flex-row items-center">
                 <TouchableOpacity onPress={() => router.back()} className="mr-3">
@@ -237,6 +239,7 @@ const WeatherDetailsScreen = () => {
                 <AIPackingSuggestions coords={destinationCoords} days={3} />
             </ScrollView>
         </SafeAreaView>
+        </PremiumGate>
     );
 };
 

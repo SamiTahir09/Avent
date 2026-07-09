@@ -6,6 +6,7 @@ import moment from "moment";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import CustomButton from "@/components/CustomButton";
 import LocationPhotoGallery from "@/components/LocationPhotoGallery";
+import PremiumGate from "@/components/PremiumGate";
 
 const DEFAULT_IMAGE_URL =
   "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?q=80&w=2071&auto=format&fit=crop";
@@ -108,7 +109,8 @@ const Discover = () => {
       // fetch hotel images in parallel and update once
       (async () => {
         try {
-          const hotels = parsedTrip.trip_plan.hotel.options || [];
+          const hotels = parsedTrip.trip_plan?.hotel?.options || [];
+          if (!hotels.length) return;
           const hotelImgPromises = hotels.map((h: any) =>
             (async () => {
               // prefer existing image_url if provided by the plan
@@ -126,7 +128,7 @@ const Discover = () => {
               ...prev.trip_plan,
               hotel: {
                 ...prev.trip_plan.hotel,
-                options: prev.trip_plan.hotel.options.map((h: any, i: number) => ({
+                options: (prev.trip_plan.hotel?.options || []).map((h: any, i: number) => ({
                   ...h,
                   image_url: hotelImgs[i] || h.image_url || DEFAULT_IMAGE_URL,
                 })),
@@ -141,7 +143,8 @@ const Discover = () => {
       // fetch place images in parallel and update once
       (async () => {
         try {
-          const places = parsedTrip.trip_plan.places_to_visit || [];
+          const places = parsedTrip.trip_plan?.places_to_visit || [];
+          if (!places.length) return;
           const placeImgPromises = places.map((p: any) =>
             (async () => {
               if (p.image_url) return p.image_url;
@@ -156,7 +159,7 @@ const Discover = () => {
             ...prev,
             trip_plan: {
               ...prev.trip_plan,
-              places_to_visit: prev.trip_plan.places_to_visit.map((p: any, i: number) => ({
+              places_to_visit: (prev.trip_plan.places_to_visit || []).map((p: any, i: number) => ({
                 ...p,
                 image_url: placeImgs[i] || p.image_url || DEFAULT_IMAGE_URL,
               })),
@@ -260,6 +263,7 @@ const Discover = () => {
 
 
   return (
+    <PremiumGate feature="discover_places">
     <SafeAreaView className="flex-1 bg-white" edges={["top"]}>
       {/* Back Button Header */}
       <View className="px-6 pb-0 flex-row items-center" style={{ paddingTop: insets.top }}>
@@ -304,11 +308,11 @@ const Discover = () => {
             <View className="flex-row justify-between items-center mb-4">
               <View>
                 <Text className="font-outfit-bold text-lg">
-                  {parsedTripPlan.trip_plan.flight_details.departure_city}
+                  {parsedTripPlan.trip_plan.flight_details?.departure_city}
                 </Text>
                 <Text className="font-outfit text-gray-600">
-                  {parsedTripPlan.trip_plan.flight_details.departure_date}{" "}
-                  {parsedTripPlan.trip_plan.flight_details.departure_time}
+                  {parsedTripPlan.trip_plan.flight_details?.departure_date}{" "}
+                  {parsedTripPlan.trip_plan.flight_details?.departure_time}
                 </Text>
               </View>
 
@@ -316,24 +320,24 @@ const Discover = () => {
 
               <View>
                 <Text className="font-outfit-bold text-lg">
-                  {parsedTripPlan.trip_plan.flight_details.arrival_city}
+                  {parsedTripPlan.trip_plan.flight_details?.arrival_city}
                 </Text>
                 <Text className="font-outfit text-gray-600">
-                  {parsedTripPlan.trip_plan.flight_details.arrival_date}{" "}
-                  {parsedTripPlan.trip_plan.flight_details.arrival_time}
+                  {parsedTripPlan.trip_plan.flight_details?.arrival_date}{" "}
+                  {parsedTripPlan.trip_plan.flight_details?.arrival_time}
                 </Text>
               </View>
             </View>
 
             <View className="border-t border-gray-200 pt-4">
               <Text className="font-outfit text-gray-600">
-                Airline: {parsedTripPlan.trip_plan.flight_details.airline}
+                Airline: {parsedTripPlan.trip_plan.flight_details?.airline}
               </Text>
               <Text className="font-outfit text-gray-600">
-                Flight: {parsedTripPlan.trip_plan.flight_details.flight_number}
+                Flight: {parsedTripPlan.trip_plan.flight_details?.flight_number}
               </Text>
               <Text className="font-outfit text-gray-600">
-                Price: {parsedTripPlan.trip_plan.flight_details.price}
+                Price: {parsedTripPlan.trip_plan.flight_details?.price}
               </Text>
 
               {/*  REAL FLIGHT BOOKING — Providers */}
@@ -457,8 +461,8 @@ const Discover = () => {
 
           <View style={{ backgroundColor: "#f5f3ff", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#ddd6fe" }}>
             <Text style={{ fontFamily: "outfit", color: "#4b5563", marginBottom: 12, fontSize: 14 }}>
-              📍 From: {parsedTripPlan.trip_plan.flight_details.departure_city || "Your City"}{"  ➜  "}
-              {parsedTripPlan.trip_plan.flight_details.arrival_city || parsedTripPlan.trip_plan.location}
+              📍 From: {parsedTripPlan.trip_plan.flight_details?.departure_city || "Your City"}{"  ➜  "}
+              {parsedTripPlan.trip_plan.flight_details?.arrival_city || parsedTripPlan.trip_plan.location}
             </Text>
 
             {/* Pakistan Bus Options (shown only when trip involves Pakistan) */}
@@ -516,41 +520,49 @@ const Discover = () => {
         {/* Hotels Section */}
         <View className="mb-8">
           <Text className="text-2xl font-outfit-bold mb-4">Hotel Options</Text>
-          {parsedTripPlan.trip_plan.hotel.options.map(
-            (hotel: any, index: number) => (
-              <View
-                key={index}
-                className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100"
-              >
-                <Image
-                  source={{ uri: hotel.image_url }}
-                  className="w-full h-48 rounded-xl mb-4"
-                />
-                <Text className="font-outfit-bold text-lg">{hotel.name}</Text>
-                <Text className="font-outfit text-gray-600 mb-2">
-                  {hotel.address}
-                </Text>
-                <Text className="font-outfit text-gray-600">
-                  Price: {hotel.price}
-                </Text>
-                <Text className="font-outfit text-gray-600">
-                  Rating: {hotel.rating} ⭐
-                </Text>
-                <Text className="font-outfit text-gray-600 mt-2">
-                  {hotel.description}
-                </Text>
+          {(parsedTripPlan.trip_plan.hotel?.options || []).length === 0 ? (
+            <Text className="font-outfit text-gray-500">
+              No hotel options available for this trip.
+            </Text>
+          ) : (
+            parsedTripPlan.trip_plan.hotel.options.map(
+              (hotel: any, index: number) => (
+                <View
+                  key={index}
+                  className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100"
+                >
+                  <Image
+                    source={{ uri: hotel.image_url || DEFAULT_IMAGE_URL }}
+                    className="w-full h-48 rounded-xl mb-4"
+                  />
+                  <Text className="font-outfit-bold text-lg">{hotel.name}</Text>
+                  <Text className="font-outfit text-gray-600 mb-2">
+                    {hotel.address}
+                  </Text>
+                  <Text className="font-outfit text-gray-600">
+                    Price: {hotel.price}
+                  </Text>
+                  <Text className="font-outfit text-gray-600">
+                    Rating: {hotel.rating} ⭐
+                  </Text>
+                  <Text className="font-outfit text-gray-600 mt-2">
+                    {hotel.description}
+                  </Text>
 
-                <CustomButton
-                  title="View on Map"
-                  onPress={() =>
-                    handleOpenMap(
-                      hotel.geo_coordinates.latitude,
-                      hotel.geo_coordinates.longitude
-                    )
-                  }
-                  className="mt-4"
-                />
-              </View>
+                  {hotel.geo_coordinates && (
+                    <CustomButton
+                      title="View on Map"
+                      onPress={() =>
+                        handleOpenMap(
+                          hotel.geo_coordinates.latitude,
+                          hotel.geo_coordinates.longitude
+                        )
+                      }
+                      className="mt-4"
+                    />
+                  )}
+                </View>
+              )
             )
           )}
         </View>
@@ -561,43 +573,52 @@ const Discover = () => {
             Places to Visit
           </Text>
 
-          {parsedTripPlan.trip_plan.places_to_visit.map(
-            (place: any, index: number) => (
-              <View
-                key={index}
-                className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100"
-              >
-                <Image
-                  source={{ uri: place.image_url }}
-                  className="w-full h-48 rounded-xl mb-4"
-                />
-                <Text className="font-outfit-bold text-lg">{place.name}</Text>
-                <Text className="font-outfit text-gray-600 mb-2">
-                  {place.details}
-                </Text>
-                <Text className="font-outfit text-gray-600">
-                  Ticket Price: {place.ticket_price}
-                </Text>
-                <Text className="font-outfit text-gray-600">
-                  Time to Travel: {place.time_to_travel}
-                </Text>
+          {(parsedTripPlan.trip_plan.places_to_visit || []).length === 0 ? (
+            <Text className="font-outfit text-gray-500">
+              No places to visit available for this trip.
+            </Text>
+          ) : (
+            parsedTripPlan.trip_plan.places_to_visit.map(
+              (place: any, index: number) => (
+                <View
+                  key={index}
+                  className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-100"
+                >
+                  <Image
+                    source={{ uri: place.image_url || DEFAULT_IMAGE_URL }}
+                    className="w-full h-48 rounded-xl mb-4"
+                  />
+                  <Text className="font-outfit-bold text-lg">{place.name}</Text>
+                  <Text className="font-outfit text-gray-600 mb-2">
+                    {place.details}
+                  </Text>
+                  <Text className="font-outfit text-gray-600">
+                    Ticket Price: {place.ticket_price}
+                  </Text>
+                  <Text className="font-outfit text-gray-600">
+                    Time to Travel: {place.time_to_travel}
+                  </Text>
 
-                <CustomButton
-                  title="View on Map"
-                  onPress={() =>
-                    handleOpenMap(
-                      place.geo_coordinates.latitude,
-                      place.geo_coordinates.longitude
-                    )
-                  }
-                  className="mt-4"
-                />
-              </View>
+                  {place.geo_coordinates && (
+                    <CustomButton
+                      title="View on Map"
+                      onPress={() =>
+                        handleOpenMap(
+                          place.geo_coordinates.latitude,
+                          place.geo_coordinates.longitude
+                        )
+                      }
+                      className="mt-4"
+                    />
+                  )}
+                </View>
+              )
             )
           )}
         </View>
       </ScrollView>
     </SafeAreaView>
+    </PremiumGate>
   );
 };
 

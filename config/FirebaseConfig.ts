@@ -4,12 +4,14 @@ import { demoAuth } from "./demoMode";
 let auth: any;
 let db: any;
 let app: any;
+let functionsInstance: any;
 let onAuthStateChanged: any;
 
 if (isDemoMode()) {
   auth = demoAuth;
   db = {};
   app = {};
+  functionsInstance = {};
   onAuthStateChanged = (_auth: any, callback: any) => {
     return demoAuth.onAuthStateChanged(_auth, callback);
   };
@@ -23,6 +25,7 @@ if (isDemoMode()) {
   const AsyncStorage =
     require("@react-native-async-storage/async-storage").default;
   const { getFirestore } = require("firebase/firestore");
+  const { getFunctions } = require("firebase/functions");
 
   const firebaseConfig = {
     apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -39,7 +42,8 @@ if (isDemoMode()) {
     persistence: getReactNativePersistence(AsyncStorage),
   });
   db = getFirestore(app);
+  functionsInstance = getFunctions(app);
   onAuthStateChanged = firebaseOnAuthStateChanged;
 }
 
-export { app, auth, db, onAuthStateChanged };
+export { app, auth, db, functionsInstance as functions, onAuthStateChanged };

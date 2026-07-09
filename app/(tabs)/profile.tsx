@@ -5,9 +5,18 @@ import { auth } from "@/config/FirebaseConfig";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import CustomButton from "@/components/CustomButton";
+import { usePremiumStore } from "@/store/premiumStore";
+
+const PLAN_LABEL: Record<string, string> = {
+  monthly: "Monthly",
+  yearly: "Yearly",
+  lifetime: "Lifetime",
+};
 
 const Profile = () => {
   const user = auth.currentUser;
+  const premium = usePremiumStore((s) => s.premium);
+  const subscriptionType = usePremiumStore((s) => s.subscriptionType);
 
   const handleLogout = async () => {
     try {
@@ -37,6 +46,25 @@ const Profile = () => {
           </View>
         </View>
       </View>
+
+      {/* Premium Section */}
+      <TouchableOpacity
+        onPress={() => router.push("/premium")}
+        className="flex-row items-center justify-between bg-purple-50 p-4 rounded-xl mb-8 border border-purple-100"
+      >
+        <View className="flex-row items-center">
+          <Ionicons name={premium ? "star" : "star-outline"} size={24} color="#8b5cf6" />
+          <View className="ml-3">
+            <Text className="font-outfit-bold">Avent Premium</Text>
+            <Text className="text-gray-500 font-outfit text-sm">
+              {premium
+                ? `${subscriptionType ? PLAN_LABEL[subscriptionType] ?? subscriptionType : "Premium"} plan active`
+                : "Upgrade for unlimited trips & features"}
+            </Text>
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#8b5cf6" />
+      </TouchableOpacity>
 
       {/* Account Settings Section */}
       <View className="mb-8">

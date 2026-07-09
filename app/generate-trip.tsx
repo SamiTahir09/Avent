@@ -1,6 +1,7 @@
 import { View, Text, Image, TouchableOpacity, Alert } from "react-native";
 import React, { useContext, useEffect, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useMutation } from "@tanstack/react-query";
 import { CreateTripContext } from "@/context/CreateTripContext";
 import { AI_PROMPT } from "@/constants/Options";
 import { chatSession } from "@/config/GeminiConfig";
@@ -10,6 +11,9 @@ import { auth, db } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
 import { demoSaveTrip } from "@/config/demoMode";
 import { isOnline, queueTripForSync } from "@/services/OfflineSync";
+import { saveLocalTrip } from "@/services/LocalFreeTrial";
+import { consumeFreeTrip } from "@/utils/purchaseVerification";
+import { usePremiumStore } from "@/store/premiumStore";
 
 const generateTripId = () =>
   `${Date.now().toString()}${Math.random().toString(36).slice(2, 8)}`;
@@ -51,9 +55,11 @@ const GenerateTrip = () => {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<GenerationStep>("prompting");
   const [error, setError] = useState<string | null>(null);
+  const [paywallBlocked, setPaywallBlocked] = useState(false);
   const user = auth.currentUser;
 
   const router = useRouter();
+  const consumeFreeTripMutation = useMutation({ mutationFn: consumeFreeTrip });
 
   useEffect(() => {
     generateTrip();
@@ -62,7 +68,26 @@ const GenerateTrip = () => {
   const generateTrip = async () => {
     setLoading(true);
     setError(null);
+    setPaywallBlocked(false);
     setStep("prompting");
+
+    // Server-authoritative entitlement check — must run before the Gemini
+    // call (which costs money) rather than trusting a client-side store
+    // read, since a deep-link straight into this screen would otherwise
+    // bypass the gates in StartNewTripCard / mytrip.tsx's "+" button.
+    try {
+      const { allowed } = await consumeFreeTripMutation.mutateAsync();
+      if (!allowed) {
+        setLoading(false);
+        setPaywallBlocked(true);
+        return;
+      }
+    } catch (err) {
+      console.error("Free trip check failed:", err);
+      setLoading(false);
+      setError("Couldn't verify your account. Please check your connection and try again.");
+      return;
+    }
 
     const locationInfo = tripData.find(
       (item): item is { locationInfo: TripLocationInfo } => "locationInfo" in item
@@ -229,6 +254,24 @@ const GenerateTrip = () => {
       return;
     }
 
+    // Free (non-premium) users' trips are stored fully on-device — see
+    // services/LocalFreeTrial.ts — same as consumeFreeTrip's gate above, so
+    // neither the free tier's trial count nor its trip data ever depend on
+    // Firestore or Cloud Functions being deployed.
+    if (!usePremiumStore.getState().premium) {
+      try {
+        await saveLocalTrip(user!.uid, tripRecord);
+      } catch (saveErr) {
+        console.error("Error saving local trip:", saveErr);
+        setLoading(false);
+        setError("Your itinerary was generated but couldn't be saved. Please try again.");
+        return;
+      }
+      setLoading(false);
+      router.replace("/(tabs)/mytrip");
+      return;
+    }
+
     const saveOfflineAndExit = async () => {
       await queueTripForSync(tripRecord);
       setLoading(false);
@@ -260,6 +303,35 @@ const GenerateTrip = () => {
     setLoading(false);
     router.replace("/(tabs)/mytrip");
   };
+
+  if (paywallBlocked) {
+    return (
+      <SafeAreaView className="p-6 h-full flex flex-col items-center justify-center">
+        <Text className="font-outfit-bold text-3xl text-center text-purple-700">
+          You've used your free AI trip
+        </Text>
+        <Text className="font-outfit-medium text-lg text-center mt-4 text-gray-600">
+          Upgrade to Premium to generate unlimited trips and unlock all premium features.
+        </Text>
+
+        <TouchableOpacity
+          onPress={() => router.replace("/premium")}
+          className="bg-purple-600 rounded-full px-8 py-4 mt-10"
+        >
+          <Text className="font-outfit-bold text-white text-lg">View Plans</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => router.replace("/(tabs)/mytrip")}
+          className="mt-4 px-8 py-3"
+        >
+          <Text className="font-outfit-medium text-gray-500 text-base">
+            Go Back
+          </Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   if (error) {
     return (

@@ -300,44 +300,6 @@ const ReviewTrip = () => {
                 )}
               </View>
 
-              {Array.isArray(weatherData?.forecast) && weatherData.forecast.length > 0 ? (
-                <View key="forecast-section" className="mb-4">
-                  <Text className="text-gray-500 text-sm font-outfit mb-2">Forecast</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ paddingHorizontal: 2 }}
-                  >
-                    {weatherData.forecast.map((f, index) => (
-                      <View
-                        key={f.date || `forecast-${index}`}
-                        style={[cardStyle.card, { width: 120 }]}
-                        className="p-3 mr-3 items-center"
-                      >
-                        <Text className="text-sm text-gray-500">
-                          {f.date ? moment(f.date).format("ddd") : "—"}
-                        </Text>
-                        {f.icon ? (
-                          <Image source={{ uri: f.icon }} style={{ width: 48, height: 48 }} />
-                        ) : (
-                          <View style={{ width: 48, height: 48 }} className="bg-neutral-100 rounded-full" />
-                        )}
-                        <Text className="text-lg font-outfit-bold mt-1">
-                          {formatTemp(f.tempAvgC ?? f.tempMaxC)}
-                        </Text>
-                        <Text className="text-xs text-gray-500 mt-1">
-                          {f.chanceOfRain !== null && f.chanceOfRain !== undefined
-                            ? `${f.chanceOfRain}% rain`
-                            : "—"}
-                        </Text>
-                        <Text className="text-xs text-gray-500">
-                          {typeof f.windKph === "number" ? `${Math.round(f.windKph)} km/h` : "—"}
-                        </Text>
-                      </View>
-                    ))}
-                  </ScrollView>
-                </View>
-              ) : null}
             </View>
           ) : null}
 
@@ -366,6 +328,36 @@ const ReviewTrip = () => {
               <Ionicons name="partly-sunny-outline" size={20} color="#8b5cf6" />
               <Text style={{ color: "#7c3aed", fontFamily: "outfit-bold", fontSize: 15 }}>
                 View Full Weather Details
+              </Text>
+              <Ionicons name="chevron-forward" size={18} color="#8b5cf6" />
+            </TouchableOpacity>
+          ) : null}
+
+          {locationInfo ? (
+            <TouchableOpacity
+              onPress={() =>
+                router.push({
+                  pathname: "/weather-week",
+                  params: { tripData: JSON.stringify(safeTripData) },
+                } as any)
+              }
+              style={[
+                cardStyle.card,
+                {
+                  backgroundColor: "#faf5ff",
+                  borderColor: "#e9d5ff",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: 14,
+                  marginBottom: 16,
+                  gap: 8,
+                },
+              ]}
+            >
+              <Ionicons name="calendar-outline" size={20} color="#8b5cf6" />
+              <Text style={{ color: "#7c3aed", fontFamily: "outfit-bold", fontSize: 15 }}>
+                See Next 7 Days Weather
               </Text>
               <Ionicons name="chevron-forward" size={18} color="#8b5cf6" />
             </TouchableOpacity>

@@ -267,6 +267,90 @@ export function buildDemoTripPlan(
   };
 }
 
+// ─── Demo billing (mirrors demo trips: local-only, AsyncStorage-backed) ────
+// Lets the freemium flow (1 free trip, paywall, "purchase", restore) be
+// exercised in demo/preview builds without Firestore or expo-iap.
+const ENTITLEMENT_KEY = "avent_demo_entitlement";
+
+const defaultDemoEntitlement = (): UserEntitlement => ({
+  premium: false,
+  subscriptionType: null,
+  purchaseDate: null,
+  expiryDate: null,
+  platform: null,
+  purchaseToken: null,
+  productId: null,
+  transactionId: null,
+  subscriptionStatus: null,
+  autoRenewing: null,
+  freeTripsUsed: 0,
+  freeTripLimit: 2,
+  lastVerifiedAt: null,
+});
+
+export async function demoGetEntitlement(): Promise<UserEntitlement> {
+  try {
+    const raw = await AsyncStorage.getItem(ENTITLEMENT_KEY);
+    if (raw) return { ...defaultDemoEntitlement(), ...JSON.parse(raw) };
+  } catch {
+    // fall through to defaults
+  }
+  return defaultDemoEntitlement();
+}
+
+async function saveDemoEntitlement(entitlement: UserEntitlement) {
+  await AsyncStorage.setItem(ENTITLEMENT_KEY, JSON.stringify(entitlement));
+}
+
+export async function demoConsumeFreeTrip(): Promise<{
+  allowed: boolean;
+  reason: "premium" | "free_trip" | "limit_reached";
+}> {
+  const entitlement = await demoGetEntitlement();
+  if (entitlement.premium) return { allowed: true, reason: "premium" };
+  if (entitlement.freeTripsUsed < entitlement.freeTripLimit) {
+    await saveDemoEntitlement({
+      ...entitlement,
+      freeTripsUsed: entitlement.freeTripsUsed + 1,
+    });
+    return { allowed: true, reason: "free_trip" };
+  }
+  return { allowed: false, reason: "limit_reached" };
+}
+
+export async function demoPurchase(productId: string): Promise<UserEntitlement> {
+  const entitlement = await demoGetEntitlement();
+  const now = Date.now();
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  const subscriptionType: SubscriptionType =
+    productId === "premium_yearly"
+      ? "yearly"
+      : productId === "premium_lifetime"
+      ? "lifetime"
+      : "monthly";
+
+  const updated: UserEntitlement = {
+    ...entitlement,
+    premium: true,
+    subscriptionType,
+    purchaseDate: now,
+    expiryDate: subscriptionType === "lifetime" ? null : now + THIRTY_DAYS_MS,
+    platform: "android",
+    purchaseToken: `demo-${now}`,
+    productId,
+    transactionId: `demo-${now}`,
+    subscriptionStatus: "active",
+    autoRenewing: subscriptionType !== "lifetime",
+    lastVerifiedAt: now,
+  };
+  await saveDemoEntitlement(updated);
+  return updated;
+}
+
+export async function demoRestore(): Promise<UserEntitlement> {
+  return demoGetEntitlement();
+}
+
 export const demoChatSession = {
   sendMessage: async (prompt: string) => {
     const locationMatch = prompt.match(/Location - (.+?)\./);
