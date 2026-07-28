@@ -56,11 +56,15 @@ export interface VerifyPurchaseResult {
  * even before functions/src/consumeFreeTrip.ts is deployed.
  */
 export async function consumeFreeTrip(): Promise<ConsumeFreeTripResult> {
-  if (isDemoMode()) return demoConsumeFreeTrip();
-
+  // The premium check comes FIRST, before the demo branch. Demo mode's own gate
+  // reads a separate AsyncStorage entitlement, so checking it first meant a
+  // premium user (including a test-mode grant) was still refused after two
+  // trips and bounced to the paywall.
   if (usePremiumStore.getState().premium) {
     return { allowed: true, reason: "premium" };
   }
+
+  if (isDemoMode()) return demoConsumeFreeTrip();
 
   const uid = auth.currentUser?.uid;
   if (!uid) {

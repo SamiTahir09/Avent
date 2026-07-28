@@ -17,6 +17,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CreateTripContext } from "@/context/CreateTripContext";
 import { startOfflineSyncListener } from "@/services/OfflineSync";
 import { initTelemetry } from "@/services/telemetry";
+import { assertBypassSafety } from "@/services/billing/localEntitlement";
 import { BillingProvider } from "@/hooks/useBilling";
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -47,6 +48,9 @@ export default function RootLayout() {
   // the rest of startup is still happening — an exception thrown during font
   // loading or the first SQLite open would otherwise go unreported.
   useEffect(() => {
+    // Warns on every launch while the billing bypass is on. Here as well as in
+    // useBilling so it fires even if you never sign in.
+    assertBypassSafety();
     void initTelemetry();
   }, []);
 

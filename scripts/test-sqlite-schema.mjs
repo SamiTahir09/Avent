@@ -283,6 +283,70 @@ test("kvDeletePrefix matches by prefix only", () => {
   assert.ok(db.prepare("SELECT 1 FROM kv WHERE key = 'weather:z';").get());
 });
 
+// ─── Test-mode entitlement (services/billing/localEntitlement.ts) ──────────
+// The grant lives in the same `kv` table. These pin the two properties that
+// matter: the grant persists (that's the whole point of storing it), and
+// "reset to free tier" clears BOTH the grant and the server-entitlement cache —
+// leaving the latter behind would make premium reappear on the next sign-in.
+
+test("premium grant persists and reads back", () => {
+  const now = Date.now();
+  const entitlement = JSON.stringify({
+    premium: true,
+    subscriptionType: "yearly",
+    transactionId: `TEST-${now}`,
+  });
+  db.prepare(KV_SET).run("local_entitlement:uid-a", entitlement, null, now);
+
+  const row = db
+    .prepare("SELECT value, expires_at FROM kv WHERE key = ?;")
+    .get("local_entitlement:uid-a");
+  assert.ok(row, "grant was not stored");
+  // No TTL on the row — expiry is expressed inside the record, so the grant
+  // stays inspectable after it lapses.
+  assert.equal(row.expires_at, null);
+  assert.equal(JSON.parse(row.value).premium, true);
+  assert.match(JSON.parse(row.value).transactionId, /^TEST-/);
+});
+
+test("resetToFreeTier clears the grant AND the server cache", () => {
+  const now = Date.now();
+  db.prepare(KV_SET).run("local_entitlement:uid-a", '{"premium":true}', null, now);
+  db.prepare(KV_SET).run("entitlement_cache:uid-a", '{"premium":true}', null, now);
+  db.prepare(INCREMENT_FREE).run("uid-a", now);
+
+  // resetToFreeTier: two kvDelete calls + a counter reset.
+  db.prepare("DELETE FROM kv WHERE key = ?;").run("local_entitlement:uid-a");
+  db.prepare("DELETE FROM kv WHERE key = ?;").run("entitlement_cache:uid-a");
+  db.prepare(
+    `INSERT INTO user_stats (user_uid, free_trips_used, updated_at)
+     VALUES (?, 0, ?)
+     ON CONFLICT(user_uid) DO UPDATE SET
+       free_trips_used = excluded.free_trips_used,
+       updated_at      = excluded.updated_at;`
+  ).run("uid-a", now);
+
+  assert.equal(
+    db.prepare("SELECT COUNT(*) AS c FROM kv WHERE key LIKE '%entitlement%';").get().c,
+    0,
+    "an entitlement row survived the reset — premium would come back on next sign-in"
+  );
+  assert.equal(
+    db.prepare("SELECT free_trips_used FROM user_stats WHERE user_uid = ?;").get("uid-a")
+      .free_trips_used,
+    0
+  );
+});
+
+test("a grant for one uid doesn't leak to another", () => {
+  const now = Date.now();
+  db.prepare(KV_SET).run("local_entitlement:uid-a", '{"premium":true}', null, now);
+  const other = db
+    .prepare("SELECT value FROM kv WHERE key = ?;")
+    .get("local_entitlement:uid-b");
+  assert.equal(other, undefined);
+});
+
 // ─── Analytics queue ───────────────────────────────────────────────────────
 
 test("analytics queue insert + pending select + markSent", () => {

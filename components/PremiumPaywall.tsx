@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { usePremiumStore } from "@/store/premiumStore";
 import { useBilling } from "@/hooks/useBilling";
 import PremiumCard from "@/components/PremiumCard";
+import TestModeBanner from "@/components/TestModeBanner";
 
 const FEATURE_COPY: Record<PremiumFeatureKey, { title: string; description: string }> = {
   unlimited_trips: {
@@ -73,6 +74,8 @@ const PremiumPaywall = ({ visible, onClose, feature = "unlimited_trips" }: Premi
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text className="text-2xl font-outfit-bold mb-2">{copy.title}</Text>
             <Text className="text-gray-500 font-outfit-medium mb-6">{copy.description}</Text>
+
+            <TestModeBanner compact />
 
             <PremiumCard
               productId="premium_monthly"

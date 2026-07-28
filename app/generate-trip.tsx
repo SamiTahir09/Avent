@@ -1,5 +1,5 @@
 import { View, Text, Image, TouchableOpacity } from "react-native";
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useMutation } from "@tanstack/react-query";
 import { CreateTripContext } from "@/context/CreateTripContext";
@@ -55,10 +55,41 @@ const GenerateTrip = () => {
 
   const router = useRouter();
   const consumeFreeTripMutation = useMutation({ mutationFn: consumeFreeTrip });
+  const entitlementLoaded = usePremiumStore((s) => s.entitlementLoaded);
+  const startedRef = useRef(false);
+  const [waitingForEntitlement, setWaitingForEntitlement] = useState(
+    !usePremiumStore.getState().entitlementLoaded
+  );
 
+  // Waits for the entitlement to resolve before consuming anything. On a cold
+  // start (or a deep link straight into this screen) `premium` is still false
+  // for a moment, so firing immediately would charge a paying user a free-trip
+  // credit — and, at the limit, show them the paywall.
+  //
+  // The ref makes this run exactly once: entitlementLoaded can flip more than
+  // once (sign-out/sign-in, a second snapshot), and each flip would otherwise
+  // kick off another Gemini call.
   useEffect(() => {
-    generateTrip();
-  }, []);
+    if (startedRef.current) return;
+
+    if (entitlementLoaded) {
+      startedRef.current = true;
+      setWaitingForEntitlement(false);
+      generateTrip();
+      return;
+    }
+
+    // Fallback so the screen can't spin forever if the entitlement never
+    // resolves (no network and no cached value, or a signed-out deep link).
+    // consumeFreeTrip is authoritative anyway and will reject if there's no user.
+    const timeout = setTimeout(() => {
+      if (startedRef.current) return;
+      startedRef.current = true;
+      setWaitingForEntitlement(false);
+      generateTrip();
+    }, 6000);
+    return () => clearTimeout(timeout);
+  }, [entitlementLoaded]);
 
   const generateTrip = async () => {
     setLoading(true);
@@ -368,7 +399,9 @@ const GenerateTrip = () => {
         Please Wait...
       </Text>
       <Text className="font-outfit-medium text-xl text-center mt-10">
-        {STEP_LABELS[step]}
+        {waitingForEntitlement
+          ? "Checking your subscription..."
+          : STEP_LABELS[step]}
       </Text>
 
       <Image

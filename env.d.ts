@@ -17,5 +17,10 @@ declare namespace NodeJS {
     EXPO_PUBLIC_GA4_API_SECRET?: string;
     /** Lets Analytics/Crashlytics report while running under Metro in dev. */
     EXPO_PUBLIC_FORCE_TELEMETRY_IN_DEV?: string;
+    /**
+     * "true" makes the premium buttons grant premium instantly with no payment.
+     * TESTING ONLY — must be false for a production build.
+     */
+    EXPO_PUBLIC_BILLING_BYPASS?: string;
   }
 }

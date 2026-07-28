@@ -7,6 +7,7 @@ import { usePremiumStore } from "@/store/premiumStore";
 import { useBilling } from "@/hooks/useBilling";
 import PremiumCard from "@/components/PremiumCard";
 import RestoreButton from "@/components/RestoreButton";
+import TestModeBanner from "@/components/TestModeBanner";
 
 const BENEFITS = [
   "Unlimited AI trip generation",
@@ -71,6 +72,8 @@ const PremiumScreen = () => {
         className="flex-1"
         contentContainerStyle={{ padding: 24, paddingTop: 8, paddingBottom: 40 }}
       >
+        <TestModeBanner />
+
         {premium ? (
           <View className="bg-purple-50 border border-purple-100 p-5 rounded-2xl mb-6">
             <View className="flex-row items-center mb-2" style={{ gap: 8 }}>

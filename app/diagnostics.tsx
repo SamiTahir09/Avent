@@ -22,7 +22,17 @@ import {
   type TelemetryStatus,
 } from "@/services/telemetry";
 import { analytics, crash } from "@/services/telemetry";
-import { countTripsForUser } from "@/services/db/trips";
+import {
+  countTripsForUser,
+  getLocalFreeTripsUsed,
+} from "@/services/db/trips";
+import {
+  getLocalPremium,
+  isBillingBypassEnabled,
+  resetToFreeTier,
+} from "@/services/billing/localEntitlement";
+import { FREE_TRIP_LIMIT } from "@/services/LocalFreeTrial";
+import { usePremiumStore } from "@/store/premiumStore";
 import { auth } from "@/config/FirebaseConfig";
 
 /**
@@ -131,21 +141,37 @@ const Diagnostics = () => {
   const [telemetry, setTelemetry] = useState<TelemetryStatus | null>(null);
   const [keyResults, setKeyResults] = useState<KeyCheckResult[] | null>(null);
   const [tripCount, setTripCount] = useState<number | null>(null);
+  const [freeTripsUsed, setFreeTripsUsed] = useState<number | null>(null);
+  const [localGrant, setLocalGrant] = useState<UserEntitlement | null>(null);
   const [checkingKeys, setCheckingKeys] = useState(false);
   const [loading, setLoading] = useState(true);
+  const premium = usePremiumStore((state) => state.premium);
+  const subscriptionType = usePremiumStore((state) => state.subscriptionType);
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
     try {
-      const [status, count] = await Promise.all([
+      const uid = auth.currentUser?.uid ?? null;
+      const [status, count, used, grant] = await Promise.all([
         getTelemetryStatus(),
         countTripsForUser({
           email: auth.currentUser?.email ?? null,
-          uid: auth.currentUser?.uid ?? null,
+          uid,
         }),
+        uid ? getLocalFreeTripsUsed(uid) : Promise.resolve(0),
+        uid && isBillingBypassEnabled()
+          ? getLocalPremium(uid)
+          : Promise.resolve(null),
       ]);
       setTelemetry(status);
       setTripCount(count);
+      setFreeTripsUsed(used);
+      setLocalGrant(grant);
+    } catch (err) {
+      // Called as `void loadStatus()`, so without this a SQLite failure would
+      // be an unhandled rejection and the screen would render blank silently.
+      console.error("Diagnostics failed to load:", err);
+      await crash.recordError(err, { screen: "diagnostics", action: "loadStatus" });
     } finally {
       setLoading(false);
     }
@@ -194,6 +220,58 @@ const Diagnostics = () => {
             const result = crash.sendTestCrash();
             if (!result.native) {
               Alert.alert("Not sent natively", result.detail);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const onResetToFree = () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      Alert.alert("Not signed in", "Sign in first — the entitlement is per-account.");
+      return;
+    }
+    Alert.alert(
+      "Reset to free tier?",
+      "Removes the test premium grant and sets the free-trip counter back to 0, " +
+        "so the paywall and the trip limit can both be tested again. Saved trips are kept.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await resetToFreeTier(uid);
+              // Mirror it into the in-memory store too, otherwise the UI keeps
+              // showing premium until the next auth/Firestore event.
+              // Every field, not a partial patch — a leftover `platform` or
+              // `purchaseToken` would leave the store in a shape that no real
+              // free-tier account ever has.
+              usePremiumStore.getState().setEntitlement({
+                premium: false,
+                subscriptionType: null,
+                purchaseDate: null,
+                expiryDate: null,
+                platform: null,
+                purchaseToken: null,
+                productId: null,
+                transactionId: null,
+                subscriptionStatus: null,
+                autoRenewing: null,
+                freeTripsUsed: 0,
+                freeTripLimit: FREE_TRIP_LIMIT,
+                lastVerifiedAt: null,
+              });
+              await loadStatus();
+              Alert.alert(
+                "Back to free tier",
+                `Premium removed, free trips reset to 0 of ${FREE_TRIP_LIMIT}.`
+              );
+            } catch (err) {
+              Alert.alert("Reset failed", String(err));
             }
           },
         },
@@ -326,6 +404,43 @@ const Diagnostics = () => {
             </Section>
           </>
         )}
+
+        <Section title="Billing">
+          <Row
+            status={isBillingBypassEnabled() ? "missing" : "pass"}
+            title="Purchase bypass"
+            detail={
+              isBillingBypassEnabled()
+                ? "ON — tapping a plan grants premium instantly, no payment. Set EXPO_PUBLIC_BILLING_BYPASS=false before release."
+                : "OFF — real expo-iap purchase + server verification"
+            }
+          />
+          <Row
+            status={premium ? "pass" : "skipped"}
+            title="Premium active"
+            detail={
+              premium
+                ? `${subscriptionType ?? "premium"}${
+                    localGrant ? " (test grant, stored in SQLite)" : " (server-verified)"
+                  }`
+                : "free tier"
+            }
+          />
+          <Row
+            status={
+              (freeTripsUsed ?? 0) >= FREE_TRIP_LIMIT ? "missing" : "pass"
+            }
+            title="Free trips used"
+            detail={`${freeTripsUsed ?? 0} of ${FREE_TRIP_LIMIT}`}
+          />
+          {isBillingBypassEnabled() && (
+            <Button
+              label="Reset to free tier"
+              onPress={onResetToFree}
+              variant="danger"
+            />
+          )}
+        </Section>
 
         <Section title="API keys">
           <Text className="font-outfit text-sm text-gray-500 mb-1">

@@ -168,6 +168,42 @@ No PII is sent. Only `uid` goes to Analytics/Crashlytics — never the email —
 
 One caveat inherent to Mode A: `EXPO_PUBLIC_GA4_API_SECRET` is inlined into the JS bundle, so it's extractable from a shipped APK and anyone holding it can write events into your GA4 property. That's unavoidable for client-side Measurement Protocol. It's fine for testing and for a soft launch; move to Mode B before it matters.
 
+## 4b. Billing bypass (test mode)
+
+> **`EXPO_PUBLIC_BILLING_BYPASS` is currently `true` in `.env`.** Set it to `false` before any production build, or every user gets premium for free.
+
+While real billing isn't set up yet, tapping any plan on the paywall grants premium immediately — no Google Play sheet, no purchase token, no `verifyPurchase` Cloud Function.
+
+**How to use it**
+
+1. Sign in (the entitlement is per-account, keyed on uid).
+2. Profile → Avent Premium, or any paywall → tap **Monthly** or **Yearly**.
+3. Premium is granted and written to SQLite. Restart the app — it's still there.
+4. To go back: **Profile → Diagnostics → Reset to free tier**. Removes the grant and sets the free-trip counter to 0, so the paywall and the "you've used your free AI trip" limit can both be retested. Saved trips are kept.
+
+**How it behaves**
+
+The grant produces the same `UserEntitlement` shape the Firestore listener does, so no screen has a test-mode special case — `PremiumGate`, the trip limit, the premium screen's status card and purchase history all render exactly as they will for a real subscriber. Monthly gets a 30-day expiry, yearly 365 days, and the order ID is prefixed `TEST-` so a test purchase is recognisable wherever it surfaces.
+
+Two things the bypass has to override, which is where the subtlety is:
+
+- **The Firestore listener is skipped while a grant exists.** Firestore knows nothing about the grant, so its `premium: false` would revoke it on the very next snapshot.
+- **Reset clears the server-entitlement cache too.** That cache (added so premium survives being offline) would otherwise hydrate premium straight back on the next sign-in, making the reset look broken.
+
+**Three guards against shipping it**
+
+1. Inert unless the env var is exactly `"true"` — anything else and the real expo-iap path runs untouched.
+2. A loud console warning on every app launch.
+3. A yellow **TEST MODE — no real payment** banner on the premium screen and on every paywall modal.
+
+Analytics `purchase` events from a bypass grant carry `test_mode: true`, so they can be filtered out of GA4 revenue.
+
+**Going live later:** set the flag to `false`. Nothing needs deleting — `services/billing/localEntitlement.ts` becomes dead weight and the expo-iap + Cloud Function path takes over. Existing test grants stay in SQLite but are ignored, since the bypass check runs before the read. Follow `BILLING_SETUP.md` for the Play Console side.
+
+**Note on Expo Go:** `RealBillingProvider` calls expo-iap's `useIAP()`, which is a native module. If you're testing in Expo Go rather than a dev build, set `EXPO_PUBLIC_DEMO_MODE=true` — the bypass works identically in the demo provider.
+
+---
+
 ## 4a. Other fixes made while wiring this up
 
 These were found while reviewing the migration and were fixed in the same pass:
@@ -179,6 +215,13 @@ These were found while reviewing the migration and were fixed in the same pass:
 - **A failed SQLite migration now rejects** rather than returning a handle with no tables — which had turned one clear startup error into scattered "no such table" unhandled rejections. `PRAGMA user_version` is also bumped inside each migration's transaction, so a kill mid-migration can't leave committed work that re-runs.
 - **The analytics queue is bounded by total rows**, not just sent rows. In dev — and in any build with no backend configured — nothing is ever marked sent, so the old prune deleted nothing and the table grew without limit.
 - **GA4 is validated once at startup.** `/mp/collect` returns 204 even for a wrong measurement id or bad secret, so events used to be marked delivered while GA4 discarded them. The debug endpoint is now checked once and the backend is treated as unconfigured if it fails.
+
+Found during the billing-bypass review and fixed in the same pass:
+
+- **`consumeFreeTrip` checks `premium` before the demo branch.** Demo mode has its own free-trip gate reading a separate AsyncStorage entitlement, so a premium user in a demo build was still refused after two trips and bounced to the paywall.
+- **Premium can't leak between accounts on a shared device.** Unsubscribing a Firestore listener doesn't stop an *already executing* async callback, so account A's callback could resume after sign-out and write A's entitlement back into the store — which B then inherited until B's own first snapshot (i.e. the whole session, if offline). The callback now re-checks `auth.currentUser` before writing, and the cache hydration explicitly resets to the free-tier shape when there's nothing cached.
+- **`generate-trip` waits for `entitlementLoaded`.** On a cold start `premium` is still false for a moment, so a paying user opening that screen directly would burn a free-trip credit — and at the limit, see the paywall. There's a 6-second fallback so the screen can't spin forever, and a ref so it can only fire once.
+- **The bypass purchase/restore paths are guarded.** They set `purchaseState` to `purchasing`/`verifying` first; an unguarded SQLite failure would have left `busy` true forever, disabling every plan button for the rest of the session.
 
 ---
 
@@ -240,3 +283,13 @@ On a device, **Profile → Diagnostics**:
 - [ ] Run API key checks → all green
 - [ ] Generate a trip, force-quit the app, reopen → trip still there (proves SQLite persistence, not just in-memory state)
 - [ ] Turn on airplane mode, generate a trip → saves with no error and no "pending sync" state
+
+Billing bypass (while `EXPO_PUBLIC_BILLING_BYPASS=true`):
+
+- [ ] Paywall shows the yellow **TEST MODE** banner
+- [ ] Tap a plan → premium granted, status card shows the plan and a `TEST-` order ID
+- [ ] Force-quit and reopen → still premium
+- [ ] Premium features unlock (Discover, weather, packing, unlimited trips)
+- [ ] Diagnostics → **Reset to free tier** → back to free, free trips 0 of 2
+- [ ] Reopen the app after resetting → still free (i.e. premium didn't come back from cache)
+- [ ] Generate 2 trips as a free user → the 3rd hits the paywall

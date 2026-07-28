@@ -250,6 +250,15 @@ export async function demoPurchase(productId: string): Promise<UserEntitlement> 
   return updated;
 }
 
+/**
+ * Wipes the demo entitlement so the free tier can be retested. Called by
+ * Diagnostics → "Reset to free tier", which otherwise only clears the SQLite
+ * side and would leave a demo build still reporting premium.
+ */
+export async function demoResetEntitlement(): Promise<void> {
+  await AsyncStorage.removeItem(ENTITLEMENT_KEY);
+}
+
 export async function demoRestore(): Promise<UserEntitlement> {
   return demoGetEntitlement();
 }
