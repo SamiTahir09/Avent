@@ -1,4 +1,4 @@
-import { View, Text, Image, TouchableOpacity, Alert } from "react-native";
+import { View, Text, Image, TouchableOpacity } from "react-native";
 import React, { useContext, useEffect, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useMutation } from "@tanstack/react-query";
@@ -6,14 +6,13 @@ import { CreateTripContext } from "@/context/CreateTripContext";
 import { AI_PROMPT } from "@/constants/Options";
 import { chatSession } from "@/config/GeminiConfig";
 import { useRouter } from "expo-router";
-import { doc, setDoc } from "firebase/firestore";
-import { auth, db } from "@/config/FirebaseConfig";
+import { auth } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
 import { demoSaveTrip } from "@/config/demoMode";
-import { isOnline, queueTripForSync } from "@/services/OfflineSync";
-import { saveLocalTrip } from "@/services/LocalFreeTrial";
+import { saveTrip } from "@/services/db/TripsRepository";
 import { consumeFreeTrip } from "@/utils/purchaseVerification";
-import { usePremiumStore } from "@/store/premiumStore";
+import { logEvent } from "@/services/Analytics";
+import { recordError } from "@/services/Crashlytics";
 
 const generateTripId = () =>
   `${Date.now().toString()}${Math.random().toString(36).slice(2, 8)}`;
@@ -70,6 +69,7 @@ const GenerateTrip = () => {
     setError(null);
     setPaywallBlocked(false);
     setStep("prompting");
+    logEvent("trip_generate_started");
 
     // Server-authoritative entitlement check — must run before the Gemini
     // call (which costs money) rather than trusting a client-side store
@@ -78,12 +78,15 @@ const GenerateTrip = () => {
     try {
       const { allowed } = await consumeFreeTripMutation.mutateAsync();
       if (!allowed) {
+        logEvent("trip_generate_blocked_paywall");
         setLoading(false);
         setPaywallBlocked(true);
         return;
       }
     } catch (err) {
       console.error("Free trip check failed:", err);
+      recordError(err, "consumeFreeTrip entitlement check failed");
+      logEvent("trip_generate_failed", { stage: "entitlement" });
       setLoading(false);
       setError("Couldn't verify your account. Please check your connection and try again.");
       return;
@@ -123,6 +126,8 @@ const GenerateTrip = () => {
       tripResponse = JSON.parse(result.response.text());
     } catch (err: any) {
       console.error("AI trip generation failed:", err);
+      recordError(err, "Gemini trip generation failed");
+      logEvent("trip_generate_failed", { stage: "ai" });
       setLoading(false);
       setError(
         err?.message?.includes("404") || err?.message?.includes("not found")
@@ -227,6 +232,7 @@ const GenerateTrip = () => {
       }
     } catch (e) {
       console.error("Error resolving assets during trip generation:", e);
+      recordError(e, "Trip asset enrichment failed (non-blocking)");
     }
 
     setStep("saving");
@@ -245,61 +251,33 @@ const GenerateTrip = () => {
         await demoSaveTrip(tripRecord);
       } catch (saveErr) {
         console.error("Error saving demo trip:", saveErr);
+        recordError(saveErr, "Trip save failed (demo)");
+        logEvent("trip_generate_failed", { stage: "save", storage: "demo" });
         setLoading(false);
         setError("Your itinerary was generated but couldn't be saved. Please try again.");
         return;
       }
+      logEvent("trip_generate_success", { storage: "demo" });
       setLoading(false);
       router.replace("/(tabs)/mytrip");
       return;
     }
 
-    // Free (non-premium) users' trips are stored fully on-device — see
-    // services/LocalFreeTrial.ts — same as consumeFreeTrip's gate above, so
-    // neither the free tier's trial count nor its trip data ever depend on
-    // Firestore or Cloud Functions being deployed.
-    if (!usePremiumStore.getState().premium) {
-      try {
-        await saveLocalTrip(user!.uid, tripRecord);
-      } catch (saveErr) {
-        console.error("Error saving local trip:", saveErr);
-        setLoading(false);
-        setError("Your itinerary was generated but couldn't be saved. Please try again.");
-        return;
-      }
-      setLoading(false);
-      router.replace("/(tabs)/mytrip");
-      return;
-    }
-
-    const saveOfflineAndExit = async () => {
-      await queueTripForSync(tripRecord);
-      setLoading(false);
-      Alert.alert(
-        "Saved Offline",
-        "You're offline — this trip is saved on your device and will sync automatically once you're back online."
-      );
-      router.replace("/(tabs)/mytrip");
-    };
-
-    if (!(await isOnline())) {
-      await saveOfflineAndExit();
-      return;
-    }
-
+    // Every trip — free or premium — is stored on-device in SQLite (see
+    // services/db/TripsRepository.ts). There's no Firestore/cloud fallback
+    // to branch on anymore, so this always succeeds offline too.
     try {
-      await setDoc(doc(db, "UserTrips", docId), tripRecord);
+      await saveTrip(user!.uid, tripRecord);
     } catch (saveErr) {
       console.error("Error saving trip:", saveErr);
-      if (!(await isOnline())) {
-        await saveOfflineAndExit();
-        return;
-      }
+      recordError(saveErr, "Trip save failed (SQLite)");
+      logEvent("trip_generate_failed", { stage: "save" });
       setLoading(false);
       setError("Your itinerary was generated but couldn't be saved. Please try again.");
       return;
     }
 
+    logEvent("trip_generate_success");
     setLoading(false);
     router.replace("/(tabs)/mytrip");
   };

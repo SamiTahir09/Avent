@@ -9,20 +9,13 @@ import React, { useContext, useEffect, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import StartNewTripCard from "@/components/MyTrips/StartNewTripCard";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { auth, db } from "@/config/FirebaseConfig";
+import { auth } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
 import { demoGetTrips } from "@/config/demoMode";
 import UserTripList from "@/components/MyTrips/UserTripList";
 import { useRouter, useFocusEffect } from "expo-router";
 import { CreateTripContext } from "@/context/CreateTripContext";
-import {
-  getPendingTrips,
-  syncPendingTrips,
-  cacheTripsSnapshot,
-  getCachedTripsSnapshot,
-} from "@/services/OfflineSync";
-import { getLocalTrips } from "@/services/LocalFreeTrial";
+import { getTrips } from "@/services/db/TripsRepository";
 import { usePremiumStore, selectCanGenerateTrip } from "@/store/premiumStore";
 import PremiumPaywall from "@/components/PremiumPaywall";
 
@@ -42,9 +35,7 @@ const MyTrip = () => {
 
   useFocusEffect(
     React.useCallback(() => {
-      if (!isDemoMode() && user) {
-        syncPendingTrips().then(() => getMyTrips());
-      }
+      if (user) getMyTrips();
     }, [user])
   );
 
@@ -64,44 +55,13 @@ const MyTrip = () => {
       return;
     }
 
-    // Free-tier trips never touch Firestore (see services/LocalFreeTrial.ts),
-    // so they're read from AsyncStorage and merged in alongside whatever's
-    // in the cloud — this keeps them visible even after the user upgrades.
-    const localTrips = user?.uid ? await getLocalTrips(user.uid) : [];
-
+    // All trips — free or premium — live on-device in SQLite (see
+    // services/db/TripsRepository.ts), so this always works offline too.
     try {
-      const q = query(
-        collection(db, "UserTrips"),
-        where("userEmail", "==", user?.email)
-      );
-      const querySnapshot = await getDocs(q);
-      const trips: any[] = [];
-      querySnapshot.forEach((doc) => {
-        trips.push(doc.data());
-      });
-
-      const pendingTrips = await getPendingTrips();
-      const syncedIds = new Set(trips.map((t) => t.docId));
-      const stillPending = pendingTrips.filter((t) => !syncedIds.has(t.docId));
-
-      setUserTrips([
-        ...stillPending.map((t) => ({ ...t, pendingSync: true })),
-        ...trips,
-        ...localTrips,
-      ]);
-
-      if (user?.email) await cacheTripsSnapshot(user.email, trips);
+      const trips = user?.uid ? await getTrips(user.uid) : [];
+      setUserTrips(trips);
     } catch (error) {
-      console.error("Error fetching trips from Firestore, using offline cache:", error);
-      const [pendingTrips, cachedTrips] = await Promise.all([
-        getPendingTrips(),
-        user?.email ? getCachedTripsSnapshot(user.email) : Promise.resolve([]),
-      ]);
-      setUserTrips([
-        ...pendingTrips.map((t) => ({ ...t, pendingSync: true })),
-        ...cachedTrips,
-        ...localTrips,
-      ]);
+      console.error("Error fetching trips:", error);
     } finally {
       setLoading(false);
     }

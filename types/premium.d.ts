@@ -16,8 +16,8 @@ declare type PurchaseState =
   | "success"
   | "error";
 
-// Mirrors the Users/{uid} Firestore document shape (see firestore.rules) —
-// dates are epoch millis on the client, converted from Firestore Timestamps.
+// Mirrors the on-device `entitlement` SQLite row (see
+// services/db/EntitlementRepository.ts) — dates are epoch millis.
 declare interface UserEntitlement {
   premium: boolean;
   subscriptionType: SubscriptionType | null;

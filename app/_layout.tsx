@@ -4,7 +4,7 @@ import {
   ThemeProvider,
 } from "@react-navigation/native";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useState } from "react";
 import "react-native-reanimated";
@@ -15,9 +15,11 @@ import "../global.css";
 import "react-native-get-random-values";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CreateTripContext } from "@/context/CreateTripContext";
-import { isDemoMode } from "@/config/env";
-import { startOfflineSyncListener } from "@/services/OfflineSync";
 import { BillingProvider } from "@/hooks/useBilling";
+import { auth, onAuthStateChanged } from "@/config/FirebaseConfig";
+import { initCrashlytics, setCrashlyticsUser } from "@/services/Crashlytics";
+import { initAnalytics, setAnalyticsUser, logScreenView } from "@/services/Analytics";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
@@ -31,6 +33,7 @@ export default function RootLayout() {
   const [tripData, setTripData] = useState<any[]>([]);
 
   const colorScheme = useColorScheme();
+  const pathname = usePathname();
   const [loaded] = useFonts({
     outfit: require("@/assets/fonts/Outfit-Regular.ttf"),
     "outfit-medium": require("@/assets/fonts/Outfit-Medium.ttf"),
@@ -43,38 +46,54 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
+  // Crashlytics/Analytics are native RNFirebase modules — independent of the
+  // JS-SDK demo-mode stub in config/FirebaseConfig.ts — so they're always
+  // initialized, on every build (collection itself is disabled in __DEV__).
   useEffect(() => {
-    if (isDemoMode()) return;
-    const unsubscribe = startOfflineSyncListener();
+    initCrashlytics();
+    initAnalytics();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user: any) => {
+      setCrashlyticsUser(user?.uid ?? null);
+      setAnalyticsUser(user?.uid ?? null);
+    });
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (pathname) logScreenView(pathname);
+  }, [pathname]);
 
   if (!loaded) {
     return null;
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <SafeAreaProvider>
-        <BillingProvider>
-          <CreateTripContext.Provider value={{ tripData, setTripData }}>
-            <StatusBar style="dark" />
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="create-trip" />
-              <Stack.Screen name="generate-trip" />
-              <Stack.Screen name="weather-details" />
-              <Stack.Screen name="weather-week" />
-              <Stack.Screen name="weather-outfit" />
-              <Stack.Screen name="location-details" />
-              <Stack.Screen name="trip-details" />
-              <Stack.Screen name="premium" options={{ presentation: "modal" }} />
-            </Stack>
-          </CreateTripContext.Provider>
-        </BillingProvider>
-      </SafeAreaProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <SafeAreaProvider>
+          <BillingProvider>
+            <CreateTripContext.Provider value={{ tripData, setTripData }}>
+              <StatusBar style="dark" />
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="(auth)" />
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="create-trip" />
+                <Stack.Screen name="generate-trip" />
+                <Stack.Screen name="weather-details" />
+                <Stack.Screen name="weather-week" />
+                <Stack.Screen name="weather-outfit" />
+                <Stack.Screen name="location-details" />
+                <Stack.Screen name="trip-details" />
+                <Stack.Screen name="premium" options={{ presentation: "modal" }} />
+              </Stack>
+            </CreateTripContext.Provider>
+          </BillingProvider>
+        </SafeAreaProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

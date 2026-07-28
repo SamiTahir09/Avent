@@ -1,17 +1,16 @@
 import { isDemoMode } from "./env";
 import { demoAuth } from "./demoMode";
 
+// Firebase is Auth-only in this app — trips and premium entitlement live in
+// the on-device SQLite database (see services/db/) instead of
+// Firestore/Cloud Functions, so there's no backend to keep in sync with.
 let auth: any;
-let db: any;
 let app: any;
-let functionsInstance: any;
 let onAuthStateChanged: any;
 
 if (isDemoMode()) {
   auth = demoAuth;
-  db = {};
   app = {};
-  functionsInstance = {};
   onAuthStateChanged = (_auth: any, callback: any) => {
     return demoAuth.onAuthStateChanged(_auth, callback);
   };
@@ -24,8 +23,6 @@ if (isDemoMode()) {
   } = require("firebase/auth");
   const AsyncStorage =
     require("@react-native-async-storage/async-storage").default;
-  const { getFirestore } = require("firebase/firestore");
-  const { getFunctions } = require("firebase/functions");
 
   const firebaseConfig = {
     apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -41,9 +38,7 @@ if (isDemoMode()) {
   auth = initializeAuth(app, {
     persistence: getReactNativePersistence(AsyncStorage),
   });
-  db = getFirestore(app);
-  functionsInstance = getFunctions(app);
   onAuthStateChanged = firebaseOnAuthStateChanged;
 }
 
-export { app, auth, db, functionsInstance as functions, onAuthStateChanged };
+export { app, auth, onAuthStateChanged };

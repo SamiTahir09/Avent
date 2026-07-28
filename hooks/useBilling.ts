@@ -1,5 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef } from "react";
-import { doc, onSnapshot, Timestamp } from "firebase/firestore";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import {
   useIAP,
   ErrorCode,
@@ -9,13 +8,19 @@ import {
   type ProductSubscription,
   type Purchase,
 } from "expo-iap";
-import { auth, db, onAuthStateChanged } from "@/config/FirebaseConfig";
+import { auth, onAuthStateChanged } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
 import { demoGetEntitlement, demoPurchase, demoRestore } from "@/config/demoMode";
-import { FREE_TRIP_LIMIT, getLocalFreeTripsUsed } from "@/services/LocalFreeTrial";
+import { getEntitlement, setEntitlement } from "@/services/db/EntitlementRepository";
 import { usePremiumStore } from "@/store/premiumStore";
-import { SUBSCRIPTION_SKUS, findOfferToken, normalizeSubscriptions } from "@/services/billing/products";
-import { verifyPurchase as verifyPurchaseApi } from "@/utils/purchaseVerification";
+import {
+  SUBSCRIPTION_SKUS,
+  findOfferToken,
+  normalizeSubscriptions,
+  subscriptionTypeFromProductId,
+} from "@/services/billing/products";
+import { logEvent } from "@/services/Analytics";
+import { recordError } from "@/services/Crashlytics";
 
 const SUBSCRIPTION_SKU_SET: readonly string[] = SUBSCRIPTION_SKUS;
 
@@ -27,16 +32,22 @@ interface BillingContextValue {
 
 const BillingContext = createContext<BillingContextValue | null>(null);
 
-const timestampToMillis = (value: unknown): number | null => {
-  if (value instanceof Timestamp) return value.toMillis();
-  if (typeof value === "number") return value;
-  return null;
-};
+// This app only sells Android subscriptions (see requestPurchase's `google`
+// field below), but `Purchase` is a Purchase Android | PurchaseIOS union, so
+// the Android-only field needs a runtime guard rather than direct access.
+const getAutoRenewing = (purchase: Purchase): boolean | null =>
+  "autoRenewingAndroid" in purchase ? purchase.autoRenewingAndroid ?? null : null;
 
 /**
- * Verifies a purchase server-side and, only on success, acknowledges it with
+ * Persists a purchase locally and, only on success, acknowledges it with
  * Google Play. Shared by both the live purchase-updated listener and the
  * restore flow, since both ultimately hand expo-iap a `Purchase` object.
+ *
+ * There's no backend here (see [[feedback-avent-premium-plan]] — Firestore +
+ * Cloud Function verification were dropped in favor of on-device SQLite), so
+ * `purchaseState: "purchased"` from the Play Billing Library itself is
+ * treated as sufficient proof of purchase — a rooted/modified device could
+ * in theory spoof this, a tradeoff accepted along with going backend-free.
  */
 async function verifyAndFinish(purchase: Purchase) {
   const store = usePremiumStore.getState();
@@ -47,38 +58,49 @@ async function verifyAndFinish(purchase: Purchase) {
   }
   if (purchase.purchaseState !== "purchased" || !purchase.purchaseToken) return;
 
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    store.setPurchaseState("error", "You must be signed in to complete a purchase.");
+    return;
+  }
+
   store.setPurchaseState("verifying");
   try {
-    const result = await verifyPurchaseApi({
+    const entitlement = await setEntitlement(uid, {
+      premium: true,
       productId: purchase.productId,
       purchaseToken: purchase.purchaseToken,
+      transactionId: purchase.transactionId ?? null,
+      purchaseDate: purchase.transactionDate ?? Date.now(),
+      platform: "android",
+      subscriptionStatus: "active",
+      autoRenewing: getAutoRenewing(purchase),
+      subscriptionType: subscriptionTypeFromProductId(purchase.productId),
+      lastVerifiedAt: Date.now(),
     });
+    usePremiumStore.getState().setEntitlement(entitlement);
 
-    if (!result.verified) {
-      store.setPurchaseState(
-        "error",
-        "We couldn't confirm this purchase. If you were charged, contact support and we'll sort it out."
-      );
-      return;
-    }
-
-    // Only acknowledge after server verification succeeds — Google
-    // auto-refunds unacknowledged purchases within 3 days, so leaving a
-    // failed-verification purchase unacknowledged is the safer failure mode
+    // Only acknowledge after the entitlement is durably saved on-device —
+    // Google auto-refunds unacknowledged purchases within 3 days, so leaving
+    // a failed-save purchase unacknowledged is the safer failure mode
     // (versus acknowledging first and risking a permanently-stuck purchase).
     await finishTransaction({ purchase, isConsumable: false });
+    logEvent("purchase", { product_id: purchase.productId });
     store.setPurchaseState("success");
   } catch (err: any) {
-    console.error("Purchase verification failed:", err);
+    console.error("Failed to save purchase entitlement:", err);
+    recordError(err, `purchase entitlement save failed for ${purchase.productId}`);
+    logEvent("purchase_error", { product_id: purchase.productId });
     store.setPurchaseState(
       "error",
-      err?.message || "Network error while verifying your purchase. Please try again."
+      err?.message || "Something went wrong saving your purchase. Please try Restore Purchases."
     );
   }
 }
 
 function RealBillingProvider({ children }: { children: React.ReactNode }) {
   const subscriptionsRef = useRef<ProductSubscription[]>([]);
+  const [uid, setUid] = useState<string | null>(auth.currentUser?.uid ?? null);
 
   const { connected, subscriptions, fetchProducts } = useIAP({
     onPurchaseSuccess: (purchase) => {
@@ -108,76 +130,87 @@ function RealBillingProvider({ children }: { children: React.ReactNode }) {
     );
   }, [connected, fetchProducts]);
 
-  // Entitlement sync, scoped to whoever is currently signed in. Started on
-  // sign-in, torn down and the store reset on sign-out so a second account
-  // on the same device never briefly inherits the previous user's premium
+  // Entitlement load, scoped to whoever is currently signed in. Reset (in
+  // memory only — the on-device row is untouched) on sign-out so a second
+  // account on the same device never inherits the previous user's premium
   // flag.
   useEffect(() => {
-    let unsubscribeSnapshot: (() => void) | undefined;
-
     const unsubscribeAuth = onAuthStateChanged(auth, async (user: any) => {
-      unsubscribeSnapshot?.();
-      unsubscribeSnapshot = undefined;
-
+      setUid(user?.uid ?? null);
       if (!user) {
         usePremiumStore.getState().reset();
         return;
       }
-
-      unsubscribeSnapshot = onSnapshot(
-        doc(db, "Users", user.uid),
-        async (snap) => {
-          const data = snap.data();
-          const premium = !!data?.premium;
-          // Free users' trial count lives on-device (see
-          // services/LocalFreeTrial.ts), not in this Firestore doc, so the
-          // gate works without Cloud Functions ever being deployed.
-          const freeTripsUsed = premium
-            ? typeof data?.freeTripsUsed === "number"
-              ? data.freeTripsUsed
-              : 0
-            : await getLocalFreeTripsUsed(user.uid);
-
-          usePremiumStore.getState().setEntitlement({
-            premium,
-            subscriptionType: data?.subscriptionType ?? null,
-            purchaseDate: timestampToMillis(data?.purchaseDate),
-            expiryDate: timestampToMillis(data?.expiryDate),
-            platform: data?.platform ?? null,
-            purchaseToken: data?.purchaseToken ?? null,
-            productId: data?.productId ?? null,
-            transactionId: data?.transactionId ?? null,
-            subscriptionStatus: data?.subscriptionStatus ?? null,
-            autoRenewing: data?.autoRenewing ?? null,
-            freeTripsUsed,
-            freeTripLimit: FREE_TRIP_LIMIT,
-            lastVerifiedAt: timestampToMillis(data?.lastVerifiedAt),
-          });
-          usePremiumStore.getState().setEntitlementLoaded(true);
-        },
-        (err) => {
-          console.error("Entitlement listener error:", err);
-          usePremiumStore.getState().setEntitlementLoaded(true);
-        }
-      );
+      const entitlement = await getEntitlement(user.uid);
+      usePremiumStore.getState().setEntitlement(entitlement);
+      usePremiumStore.getState().setEntitlementLoaded(true);
     });
 
-    return () => {
-      unsubscribeAuth();
-      unsubscribeSnapshot?.();
-    };
+    return unsubscribeAuth;
   }, []);
+
+  // With no backend to push cancellations/expirations to the client, this is
+  // the reconciliation point instead: whenever the Play Billing connection is
+  // up *and* we know who's signed in — covers cold start and a mid-session
+  // account switch alike — check whether Play Store still reports an active
+  // matching subscription, and clear the local premium flag if not. Only
+  // acts on a *successful* read — a network hiccup here must never silently
+  // downgrade someone mid-subscription.
+  useEffect(() => {
+    if (!connected || !uid) return;
+
+    (async () => {
+      try {
+        const purchases = await getAvailablePurchases();
+        const active = purchases.find(
+          (p) => SUBSCRIPTION_SKU_SET.includes(p.productId) && p.purchaseToken
+        );
+        const current = usePremiumStore.getState();
+
+        if (active) {
+          if (!current.premium || current.productId !== active.productId) {
+            const entitlement = await setEntitlement(uid, {
+              premium: true,
+              productId: active.productId,
+              purchaseToken: active.purchaseToken ?? null,
+              transactionId: active.transactionId ?? null,
+              purchaseDate: active.transactionDate ?? current.purchaseDate,
+              platform: "android",
+              subscriptionStatus: "active",
+              autoRenewing: getAutoRenewing(active),
+              subscriptionType: subscriptionTypeFromProductId(active.productId),
+              lastVerifiedAt: Date.now(),
+            });
+            usePremiumStore.getState().setEntitlement(entitlement);
+          }
+        } else if (current.premium) {
+          const entitlement = await setEntitlement(uid, {
+            premium: false,
+            subscriptionStatus: "expired",
+            lastVerifiedAt: Date.now(),
+          });
+          usePremiumStore.getState().setEntitlement(entitlement);
+        }
+      } catch (err) {
+        console.error("Entitlement reconciliation failed:", err);
+        recordError(err, "Play Store entitlement reconciliation failed");
+      }
+    })();
+  }, [connected, uid]);
 
   const purchase = async (productId: string) => {
     usePremiumStore.getState().setPurchaseState("purchasing");
 
     const offerToken = findOfferToken(subscriptionsRef.current, productId);
     if (!offerToken) {
+      logEvent("purchase_unavailable", { product_id: productId });
       usePremiumStore
         .getState()
         .setPurchaseState("error", "This plan isn't available right now. Please try again shortly.");
       return;
     }
+
+    logEvent("purchase_started", { product_id: productId });
 
     try {
       await requestPurchase({
@@ -191,6 +224,7 @@ function RealBillingProvider({ children }: { children: React.ReactNode }) {
       });
       // The outcome arrives asynchronously via onPurchaseSuccess/onPurchaseError above.
     } catch (err: any) {
+      recordError(err, `requestPurchase failed for ${productId}`);
       usePremiumStore.getState().setPurchaseState("error", err?.message || "Couldn't start the purchase.");
     }
   };

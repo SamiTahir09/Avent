@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "610118864198",
+    "project_id": "avent-2222e",
+    "storage_bucket": "avent-2222e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:610118864198:android:2b71c1a54c2136d6be6947",
+        "android_client_info": {
+          "package_name": "com.avent.company"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCmYs6bH9qQ9sd2d5CYQlv9wX1tyqsZ6M4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -36,3 +36,11 @@ export function findOfferToken(
   const product = subscriptions.find((p) => p.id === productId);
   return product?.subscriptionOffers?.[0]?.offerTokenAndroid ?? null;
 }
+
+/** Maps a Play Store product SKU to the plan label the UI/entitlement store uses. */
+export function subscriptionTypeFromProductId(productId: string): SubscriptionType | null {
+  if (productId === "premium_monthly") return "monthly";
+  if (productId === "premium_yearly") return "yearly";
+  if (productId === "premium_lifetime") return "lifetime";
+  return null;
+}

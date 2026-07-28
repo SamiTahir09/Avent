@@ -9,6 +9,8 @@ import { auth } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
 import { demoSignIn } from "@/config/demoMode";
 import DummyLogin from "@/components/DummyLogin";
+import { logEvent } from "@/services/Analytics";
+import { recordError } from "@/services/Crashlytics";
 
 const SignIn = () => {
   const [form, setForm] = useState({
@@ -28,6 +30,7 @@ const SignIn = () => {
 
       if (isDemoMode()) {
         await demoSignIn(form.email, form.password);
+        logEvent("login", { method: "password", demo: true });
         router.replace("/(tabs)/mytrip");
         return;
       }
@@ -40,6 +43,7 @@ const SignIn = () => {
 
       const user = userCredential.user;
       console.log(user);
+      logEvent("login", { method: "password" });
 
       router.replace("/(tabs)/mytrip");
     } catch (error: any) {
@@ -59,7 +63,9 @@ const SignIn = () => {
           break;
         default:
           alert("Error signing in: " + error.message);
+          recordError(error, "sign-in: unmapped auth error code");
       }
+      logEvent("login_failed", { error_code: error.code || "unknown" });
       console.error(error);
     } finally {
       setIsLoading(false);

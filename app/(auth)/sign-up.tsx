@@ -9,6 +9,8 @@ import { auth } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
 import { demoSignUp } from "@/config/demoMode";
 import DummyLogin from "@/components/DummyLogin";
+import { logEvent } from "@/services/Analytics";
+import { recordError } from "@/services/Crashlytics";
 
 const SignUp = () => {
   const [form, setForm] = useState({
@@ -29,6 +31,7 @@ const SignUp = () => {
 
       if (isDemoMode()) {
         await demoSignUp(form.email, form.password);
+        logEvent("sign_up", { method: "password", demo: true });
         router.replace("/(tabs)/mytrip");
         return;
       }
@@ -41,6 +44,7 @@ const SignUp = () => {
 
       const user = userCredential.user;
       console.log(user);
+      logEvent("sign_up", { method: "password" });
 
       router.replace("/(tabs)/mytrip");
     } catch (error: any) {
@@ -57,7 +61,9 @@ const SignUp = () => {
           break;
         default:
           alert("Error creating account: " + error.message);
+          recordError(error, "sign-up: unmapped auth error code");
       }
+      logEvent("sign_up_failed", { error_code: error.code || "unknown" });
       console.error(error);
     } finally {
       setIsLoading(false);
