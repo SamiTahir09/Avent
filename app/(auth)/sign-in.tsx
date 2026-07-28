@@ -9,6 +9,12 @@ import { auth } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
 import { demoSignIn } from "@/config/demoMode";
 import DummyLogin from "@/components/DummyLogin";
+import {
+  AnalyticsEvent,
+  analytics,
+  crash,
+  identifyUser,
+} from "@/services/telemetry";
 
 const SignIn = () => {
   const [form, setForm] = useState({
@@ -16,6 +22,10 @@ const SignIn = () => {
     password: "",
   });
   const [isLoading, setIsLoading] = useState(false);
+
+  React.useEffect(() => {
+    void analytics.logScreenView("SignIn");
+  }, []);
 
   const onLoginPress = async () => {
     try {
@@ -27,7 +37,11 @@ const SignIn = () => {
       setIsLoading(true);
 
       if (isDemoMode()) {
-        await demoSignIn(form.email, form.password);
+        const demo = await demoSignIn(form.email, form.password);
+        await identifyUser({ uid: demo.user.uid });
+        void analytics.logEvent(AnalyticsEvent.LOGIN, {
+          method: "demo",
+        });
         router.replace("/(tabs)/mytrip");
         return;
       }
@@ -38,11 +52,18 @@ const SignIn = () => {
         form.password
       );
 
-      const user = userCredential.user;
-      console.log(user);
+      // Attach the uid to Analytics and Crashlytics before navigating, so any
+      // error on the next screen is already tied to an account. The email is
+      // deliberately not sent anywhere — GA4 and Crashlytics both prohibit PII.
+      await identifyUser({ uid: userCredential.user.uid });
+      void analytics.logEvent(AnalyticsEvent.LOGIN, { method: "password" });
 
       router.replace("/(tabs)/mytrip");
     } catch (error: any) {
+      void analytics.logEvent(AnalyticsEvent.AUTH_ERROR, {
+        action: "sign_in",
+        code: error?.code ?? "unknown",
+      });
       // Handle specific Firebase auth errors
       switch (error.code) {
         case "auth/invalid-email":
@@ -59,6 +80,10 @@ const SignIn = () => {
           break;
         default:
           alert("Error signing in: " + error.message);
+          // Only unexpected codes are reported — the handled cases above are
+          // ordinary user mistakes, not defects, and would drown the real
+          // signal in Crashlytics.
+          await crash.recordError(error, { screen: "sign-in" });
       }
       console.error(error);
     } finally {

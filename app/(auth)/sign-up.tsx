@@ -9,6 +9,12 @@ import { auth } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
 import { demoSignUp } from "@/config/demoMode";
 import DummyLogin from "@/components/DummyLogin";
+import {
+  AnalyticsEvent,
+  analytics,
+  crash,
+  identifyUser,
+} from "@/services/telemetry";
 
 const SignUp = () => {
   const [form, setForm] = useState({
@@ -17,6 +23,10 @@ const SignUp = () => {
     password: "",
   });
   const [isLoading, setIsLoading] = useState(false);
+
+  React.useEffect(() => {
+    void analytics.logScreenView("SignUp");
+  }, []);
 
   const onSignUpPress = async () => {
     try {
@@ -28,7 +38,9 @@ const SignUp = () => {
       setIsLoading(true);
 
       if (isDemoMode()) {
-        await demoSignUp(form.email, form.password);
+        const demo = await demoSignUp(form.email, form.password);
+        await identifyUser({ uid: demo.user.uid });
+        void analytics.logEvent(AnalyticsEvent.SIGN_UP, { method: "demo" });
         router.replace("/(tabs)/mytrip");
         return;
       }
@@ -39,11 +51,17 @@ const SignUp = () => {
         form.password
       );
 
-      const user = userCredential.user;
-      console.log(user);
+      // Identify before navigating so the very first events of a new account
+      // (and any crash on the next screen) are already attributed to it.
+      await identifyUser({ uid: userCredential.user.uid });
+      void analytics.logEvent(AnalyticsEvent.SIGN_UP, { method: "password" });
 
       router.replace("/(tabs)/mytrip");
     } catch (error: any) {
+      void analytics.logEvent(AnalyticsEvent.AUTH_ERROR, {
+        action: "sign_up",
+        code: error?.code ?? "unknown",
+      });
       // Handle specific Firebase auth errors
       switch (error.code) {
         case "auth/email-already-in-use":
@@ -57,6 +75,9 @@ const SignUp = () => {
           break;
         default:
           alert("Error creating account: " + error.message);
+          // Only unexpected codes are reported; the cases above are ordinary
+          // user input mistakes rather than defects.
+          await crash.recordError(error, { screen: "sign-up" });
       }
       console.error(error);
     } finally {

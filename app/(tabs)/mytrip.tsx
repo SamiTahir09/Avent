@@ -9,26 +9,24 @@ import React, { useContext, useEffect, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import StartNewTripCard from "@/components/MyTrips/StartNewTripCard";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { auth, db } from "@/config/FirebaseConfig";
+import { auth, onAuthStateChanged } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
-import { demoGetTrips } from "@/config/demoMode";
 import UserTripList from "@/components/MyTrips/UserTripList";
 import { useRouter, useFocusEffect } from "expo-router";
 import { CreateTripContext } from "@/context/CreateTripContext";
-import {
-  getPendingTrips,
-  syncPendingTrips,
-  cacheTripsSnapshot,
-  getCachedTripsSnapshot,
-} from "@/services/OfflineSync";
-import { getLocalTrips } from "@/services/LocalFreeTrial";
+import { getTripsForUser } from "@/services/db/trips";
+import { migrateLegacyData } from "@/services/db/migrateLegacy";
+import { AnalyticsEvent, analytics, crash } from "@/services/telemetry";
 import { usePremiumStore, selectCanGenerateTrip } from "@/store/premiumStore";
 import PremiumPaywall from "@/components/PremiumPaywall";
 
 const MyTrip = () => {
   const [userTrips, setUserTrips] = useState<any[]>([]);
-  const user = auth.currentUser;
+  // Subscribed rather than read once: Firebase restores the persisted session
+  // asynchronously, so on a cold start straight into this tab
+  // `auth.currentUser` is still null and a plain read would leave the screen
+  // stuck on an empty state with nothing to trigger a re-render.
+  const [user, setUser] = useState<any>(auth.currentUser);
   const [loading, setLoading] = useState(false);
   const [paywallVisible, setPaywallVisible] = useState(false);
   const router = useRouter();
@@ -37,71 +35,45 @@ const MyTrip = () => {
   const isPremium = usePremiumStore((s) => s.premium);
 
   useEffect(() => {
-    user && getMyTrips();
-  }, [user]);
+    void analytics.logScreenView("MyTrips");
+    return onAuthStateChanged(auth, (nextUser: any) => setUser(nextUser));
+  }, []);
 
+  // A single trigger. Trips live in SQLite, so a refocus is just a cheap local
+  // re-read — no network round trip and no sync step to wait on. useFocusEffect
+  // already fires on mount, so a separate mount useEffect would only duplicate
+  // the read (and the legacy migration) on first render.
   useFocusEffect(
     React.useCallback(() => {
-      if (!isDemoMode() && user) {
-        syncPendingTrips().then(() => getMyTrips());
-      }
+      if (user) void getMyTrips();
     }, [user])
   );
 
   const getMyTrips = async () => {
     setLoading(true);
-    setUserTrips([]);
-
-    if (isDemoMode()) {
-      try {
-        const trips = await demoGetTrips(user?.email || "");
-        setUserTrips(trips);
-      } catch (error) {
-        console.error("Error fetching demo trips:", error);
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
-    // Free-tier trips never touch Firestore (see services/LocalFreeTrial.ts),
-    // so they're read from AsyncStorage and merged in alongside whatever's
-    // in the cloud — this keeps them visible even after the user upgrades.
-    const localTrips = user?.uid ? await getLocalTrips(user.uid) : [];
 
     try {
-      const q = query(
-        collection(db, "UserTrips"),
-        where("userEmail", "==", user?.email)
-      );
-      const querySnapshot = await getDocs(q);
-      const trips: any[] = [];
-      querySnapshot.forEach((doc) => {
-        trips.push(doc.data());
+      // Drains the pre-SQLite AsyncStorage keys and, for accounts that already
+      // had cloud trips, the old Firestore UserTrips collection. Guarded by
+      // meta flags, so this is a no-op after the first successful run.
+      await migrateLegacyData({
+        email: user?.email ?? null,
+        uid: user?.uid ?? null,
+        skipFirestore: isDemoMode(),
       });
 
-      const pendingTrips = await getPendingTrips();
-      const syncedIds = new Set(trips.map((t) => t.docId));
-      const stillPending = pendingTrips.filter((t) => !syncedIds.has(t.docId));
-
-      setUserTrips([
-        ...stillPending.map((t) => ({ ...t, pendingSync: true })),
-        ...trips,
-        ...localTrips,
-      ]);
-
-      if (user?.email) await cacheTripsSnapshot(user.email, trips);
+      // One query for every trip the user has — demo, free-tier and premium all
+      // land in the same table now, which is what removes the old
+      // "free trips disappeared after upgrading" bug.
+      const trips = await getTripsForUser({
+        email: user?.email ?? null,
+        uid: user?.uid ?? null,
+      });
+      setUserTrips(trips);
     } catch (error) {
-      console.error("Error fetching trips from Firestore, using offline cache:", error);
-      const [pendingTrips, cachedTrips] = await Promise.all([
-        getPendingTrips(),
-        user?.email ? getCachedTripsSnapshot(user.email) : Promise.resolve([]),
-      ]);
-      setUserTrips([
-        ...pendingTrips.map((t) => ({ ...t, pendingSync: true })),
-        ...cachedTrips,
-        ...localTrips,
-      ]);
+      console.error("Error reading trips from SQLite:", error);
+      await crash.recordError(error, { screen: "mytrip", action: "getMyTrips" });
+      setUserTrips([]);
     } finally {
       setLoading(false);
     }
@@ -119,9 +91,17 @@ const MyTrip = () => {
         <TouchableOpacity
           onPress={() => {
             if (!canGenerateTrip) {
+              void analytics.logEvent(AnalyticsEvent.PAYWALL_VIEW, {
+                source: "mytrip_add_button",
+                feature: "unlimited_trips",
+              });
               setPaywallVisible(true);
               return;
             }
+            void analytics.logEvent(AnalyticsEvent.TRIP_FLOW_START, {
+              source: "mytrip_add_button",
+              existing_trips: userTrips.length,
+            });
             setTripData([]);
             router.push("/create-trip/search-place");
           }}
@@ -132,7 +112,12 @@ const MyTrip = () => {
 
       {!isPremium && (
         <TouchableOpacity
-          onPress={() => router.push("/premium")}
+          onPress={() => {
+            void analytics.logEvent(AnalyticsEvent.PAYWALL_VIEW, {
+              source: "mytrip_upgrade_banner",
+            });
+            router.push("/premium");
+          }}
           className="flex-row items-center justify-center bg-purple-600 rounded-full py-3 mt-4"
           style={{ gap: 8 }}
         >

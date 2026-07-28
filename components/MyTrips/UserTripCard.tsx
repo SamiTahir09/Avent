@@ -86,13 +86,8 @@ const UserTripCard = ({ trip }: { trip: any }) => {
         >
           {trip?.tripPlan?.trip_plan?.location}
         </Text>
-        {trip?.pendingSync ? (
-          <View className="bg-amber-100 self-start px-2 py-0.5 rounded-full mt-1">
-            <Text className="text-amber-700 text-xs font-outfit-medium">
-              Pending Sync
-            </Text>
-          </View>
-        ) : null}
+        {/* The "Pending Sync" badge is gone: trips are written straight to
+            SQLite, so a saved trip is never in an in-between state. */}
         <Text className="font-outfit text-md text-gray-500 mt-1">
           {moment(startDate).format("DD MMM yyyy")}
         </Text>

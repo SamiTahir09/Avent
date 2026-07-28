@@ -1,7 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const USER_KEY = "avent_demo_user";
-const TRIPS_KEY = "avent_demo_trips";
 
 export type DemoUser = {
   email: string | null;
@@ -82,106 +81,10 @@ export async function demoSignUp(email: string, password: string) {
   return demoSignIn(email, password);
 }
 
-export async function demoSaveTrip(trip: TripRecord) {
-  const docId = trip.docId || Date.now().toString();
-  await AsyncStorage.setItem(`${TRIPS_KEY}_${docId}`, JSON.stringify(trip));
-
-  let tripIds: string[] = [];
-  try {
-    const raw = await AsyncStorage.getItem(TRIPS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        if (parsed.length > 0 && typeof parsed[0] === "object") {
-          // Migrate old format to individual keys
-          for (const oldTrip of parsed) {
-            if (oldTrip && oldTrip.docId) {
-              await AsyncStorage.setItem(`${TRIPS_KEY}_${oldTrip.docId}`, JSON.stringify(oldTrip));
-              tripIds.push(oldTrip.docId);
-            }
-          }
-        } else {
-          tripIds = parsed;
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("Failed to load/migrate old trips list, clearing index key:", err);
-    try {
-      await AsyncStorage.removeItem(TRIPS_KEY);
-    } catch {}
-  }
-
-  if (!tripIds.includes(docId)) {
-    tripIds.push(docId);
-  }
-  await AsyncStorage.setItem(TRIPS_KEY, JSON.stringify(tripIds));
-}
-
-export async function demoGetTrips(email: string) {
-  let tripIds: string[] = [];
-  try {
-    const raw = await AsyncStorage.getItem(TRIPS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        if (parsed.length > 0 && typeof parsed[0] === "object") {
-          // Migrate old format if successfully read
-          const migratedIds: string[] = [];
-          for (const oldTrip of parsed) {
-            if (oldTrip && oldTrip.docId) {
-              await AsyncStorage.setItem(`${TRIPS_KEY}_${oldTrip.docId}`, JSON.stringify(oldTrip));
-              migratedIds.push(oldTrip.docId);
-            }
-          }
-          await AsyncStorage.setItem(TRIPS_KEY, JSON.stringify(migratedIds));
-          return parsed.filter((trip: { userEmail?: string }) => trip.userEmail === email);
-        } else {
-          tripIds = parsed;
-        }
-      }
-    }
-  } catch (err) {
-    console.error("CursorWindow or other error loading trips index. Resetting database to prevent crashes:", err);
-    try {
-      await AsyncStorage.removeItem(TRIPS_KEY);
-    } catch {}
-    return [];
-  }
-
-  if (tripIds.length === 0) return [];
-
-  try {
-    const keys = tripIds.map((id) => `${TRIPS_KEY}_${id}`);
-    const pairs = await AsyncStorage.multiGet(keys);
-    const trips: any[] = [];
-    const validIds: string[] = [];
-
-    for (let i = 0; i < pairs.length; i++) {
-      const [key, value] = pairs[i];
-      const id = key.replace(`${TRIPS_KEY}_`, "");
-      if (value) {
-        try {
-          const trip = JSON.parse(value);
-          if (trip.userEmail === email) {
-            trips.push(trip);
-          }
-          validIds.push(id);
-        } catch {}
-      }
-    }
-
-    if (validIds.length !== tripIds.length) {
-      await AsyncStorage.setItem(TRIPS_KEY, JSON.stringify(validIds));
-    }
-
-    return trips;
-  } catch (err) {
-    console.error("Error reading individual trips:", err);
-    return [];
-  }
-}
-
+// Demo trips are no longer stored here — demo, free and premium trips all go
+// through services/db/trips.ts (SQLite). What remains in this file is the parts
+// of demo mode that have no real counterpart: a fake auth object, a fake
+// entitlement, and a canned Gemini response.
 export function buildDemoTripPlan(
   location: string,
   totalDays: number,

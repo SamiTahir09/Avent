@@ -1,94 +1,49 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
-import { doc, setDoc } from "firebase/firestore";
-import { db } from "@/config/FirebaseConfig";
 
-const PENDING_TRIPS_KEY = "avent_pending_sync_trips";
-const TRIPS_CACHE_KEY = "avent_trips_cache";
+import { flushAnalyticsQueue } from "@/services/telemetry/analytics";
+import { purgeExpired } from "@/services/db/kv";
+
+/**
+ * Connectivity helpers.
+ *
+ * This module used to run a write-behind queue that pushed trips to Firestore
+ * whenever the device came back online, plus a read-through AsyncStorage cache
+ * of the Firestore results. Both are gone: trips are written straight to SQLite
+ * (services/db/trips.ts), which is already local and already durable, so there
+ * is nothing to sync and nothing to cache. That removed the whole
+ * "pendingSync" state and the class of bug where a trip existed in two places
+ * with two different shapes.
+ *
+ * What still genuinely needs a "wait until online" queue is analytics — those
+ * events do have a remote destination — so the reconnect listener now drains
+ * that instead.
+ */
 
 export const isOnline = async (): Promise<boolean> => {
-  const state = await NetInfo.fetch();
-  return Boolean(state.isConnected && state.isInternetReachable !== false);
-};
-
-export const queueTripForSync = async (trip: TripRecord): Promise<void> => {
-  const pending = await getPendingTrips();
-  const withoutDupe = pending.filter((t) => t.docId !== trip.docId);
-  await AsyncStorage.setItem(
-    PENDING_TRIPS_KEY,
-    JSON.stringify([...withoutDupe, trip])
-  );
-};
-
-export const getPendingTrips = async (): Promise<TripRecord[]> => {
   try {
-    const raw = await AsyncStorage.getItem(PENDING_TRIPS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const state = await NetInfo.fetch();
+    return Boolean(state.isConnected && state.isInternetReachable !== false);
   } catch {
-    return [];
+    // If NetInfo itself fails, assume online and let the request surface the error.
+    return true;
   }
 };
 
-const removePendingTrip = async (docId: string): Promise<void> => {
-  const pending = await getPendingTrips();
-  await AsyncStorage.setItem(
-    PENDING_TRIPS_KEY,
-    JSON.stringify(pending.filter((t) => t.docId !== docId))
-  );
-};
-
-let syncing = false;
-
-export const syncPendingTrips = async (): Promise<void> => {
-  if (syncing) return;
-  const online = await isOnline();
-  if (!online) return;
-
-  const pending = await getPendingTrips();
-  if (!pending.length) return;
-
-  syncing = true;
-  try {
-    for (const trip of pending) {
-      try {
-        await setDoc(doc(db, "UserTrips", trip.docId), trip);
-        await removePendingTrip(trip.docId);
-      } catch (err) {
-        console.error(`Failed to sync trip ${trip.docId}:`, err);
-      }
-    }
-  } finally {
-    syncing = false;
-  }
-};
-
-export const cacheTripsSnapshot = async (
-  email: string,
-  trips: TripRecord[]
-): Promise<void> => {
-  try {
-    await AsyncStorage.setItem(`${TRIPS_CACHE_KEY}_${email}`, JSON.stringify(trips));
-  } catch (err) {
-    console.error("Failed to cache trips snapshot:", err);
-  }
-};
-
-export const getCachedTripsSnapshot = async (
-  email: string
-): Promise<TripRecord[]> => {
-  try {
-    const raw = await AsyncStorage.getItem(`${TRIPS_CACHE_KEY}_${email}`);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-};
-
+/**
+ * Flushes queued analytics and sweeps expired cache rows on every reconnect.
+ * Returns the NetInfo unsubscribe function.
+ */
 export const startOfflineSyncListener = (): (() => void) => {
-  syncPendingTrips();
+  const drain = () => {
+    void flushAnalyticsQueue();
+    void purgeExpired();
+  };
+
+  drain();
+
   return NetInfo.addEventListener((state) => {
     if (state.isConnected && state.isInternetReachable !== false) {
-      syncPendingTrips();
+      drain();
     }
   });
 };

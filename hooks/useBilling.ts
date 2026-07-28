@@ -16,6 +16,13 @@ import { FREE_TRIP_LIMIT, getLocalFreeTripsUsed } from "@/services/LocalFreeTria
 import { usePremiumStore } from "@/store/premiumStore";
 import { SUBSCRIPTION_SKUS, findOfferToken, normalizeSubscriptions } from "@/services/billing/products";
 import { verifyPurchase as verifyPurchaseApi } from "@/utils/purchaseVerification";
+import {
+  AnalyticsEvent,
+  analytics,
+  crash,
+  identifyUser,
+} from "@/services/telemetry";
+import { kvGet, kvSet } from "@/services/db/kv";
 
 const SUBSCRIPTION_SKU_SET: readonly string[] = SUBSCRIPTION_SKUS;
 
@@ -26,6 +33,39 @@ interface BillingContextValue {
 }
 
 const BillingContext = createContext<BillingContextValue | null>(null);
+
+// Entitlement is mirrored into SQLite after every verified snapshot.
+//
+// Without this, `premium` lives only in memory and only ever arrives via a
+// Firestore onSnapshot — which, with the SDK's default memory cache, delivers
+// nothing while offline. A paying user opening the app on a plane would be
+// treated as free tier: gated behind the paywall and burning free-trip credits.
+//
+// This is a cache of a server-verified value, not a source of truth: it's only
+// read at startup to seed the UI, and the next snapshot overwrites it. Editing
+// the file can therefore unlock premium until the app next reaches Firestore,
+// which is the accepted trade for not breaking offline paying users.
+const ENTITLEMENT_CACHE_KEY = (uid: string) => `entitlement_cache:${uid}`;
+
+async function cacheEntitlement(uid: string, entitlement: UserEntitlement) {
+  try {
+    await kvSet(ENTITLEMENT_CACHE_KEY(uid), entitlement);
+  } catch (err) {
+    console.error("Failed to cache entitlement:", err);
+  }
+}
+
+async function hydrateEntitlementFromCache(uid: string): Promise<boolean> {
+  try {
+    const cached = await kvGet<UserEntitlement>(ENTITLEMENT_CACHE_KEY(uid));
+    if (!cached) return false;
+    usePremiumStore.getState().setEntitlement(cached);
+    usePremiumStore.getState().setEntitlementLoaded(true);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const timestampToMillis = (value: unknown): number | null => {
   if (value instanceof Timestamp) return value.toMillis();
@@ -55,6 +95,10 @@ async function verifyAndFinish(purchase: Purchase) {
     });
 
     if (!result.verified) {
+      void analytics.logEvent(AnalyticsEvent.PURCHASE_FAILED, {
+        product_id: purchase.productId,
+        reason: "server_verification_rejected",
+      });
       store.setPurchaseState(
         "error",
         "We couldn't confirm this purchase. If you were charged, contact support and we'll sort it out."
@@ -67,9 +111,24 @@ async function verifyAndFinish(purchase: Purchase) {
     // failed-verification purchase unacknowledged is the safer failure mode
     // (versus acknowledging first and risking a permanently-stuck purchase).
     await finishTransaction({ purchase, isConsumable: false });
+    // GA4's reserved `purchase` event — logged only after server verification
+    // succeeds, so revenue reports can't be inflated by failed or spoofed
+    // client-side purchases.
+    void analytics.logEvent(AnalyticsEvent.PURCHASE, {
+      product_id: purchase.productId,
+      currency: "USD",
+    });
     store.setPurchaseState("success");
   } catch (err: any) {
     console.error("Purchase verification failed:", err);
+    await crash.recordError(err, {
+      action: "verifyAndFinish",
+      product_id: purchase.productId,
+    });
+    void analytics.logEvent(AnalyticsEvent.PURCHASE_FAILED, {
+      product_id: purchase.productId,
+      reason: "verification_error",
+    });
     store.setPurchaseState(
       "error",
       err?.message || "Network error while verifying your purchase. Please try again."
@@ -86,9 +145,15 @@ function RealBillingProvider({ children }: { children: React.ReactNode }) {
     },
     onPurchaseError: (error) => {
       if (error.code === ErrorCode.UserCancelled) {
+        void analytics.logEvent(AnalyticsEvent.PAYWALL_DISMISS, {
+          reason: "user_cancelled_native_sheet",
+        });
         usePremiumStore.getState().setPurchaseState("idle");
         return;
       }
+      void analytics.logEvent(AnalyticsEvent.PURCHASE_FAILED, {
+        reason: String(error.code ?? "unknown"),
+      });
       usePremiumStore.getState().setPurchaseState("error", error.message);
     },
   });
@@ -124,9 +189,14 @@ function RealBillingProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      // Seed from the cached entitlement first so the paywall gates correctly
+      // before (or entirely without) a Firestore response.
+      await hydrateEntitlementFromCache(user.uid);
+
       unsubscribeSnapshot = onSnapshot(
         doc(db, "Users", user.uid),
         async (snap) => {
+          try {
           const data = snap.data();
           const premium = !!data?.premium;
           // Free users' trial count lives on-device (see
@@ -138,7 +208,7 @@ function RealBillingProvider({ children }: { children: React.ReactNode }) {
               : 0
             : await getLocalFreeTripsUsed(user.uid);
 
-          usePremiumStore.getState().setEntitlement({
+          const entitlement: UserEntitlement = {
             premium,
             subscriptionType: data?.subscriptionType ?? null,
             purchaseDate: timestampToMillis(data?.purchaseDate),
@@ -152,11 +222,28 @@ function RealBillingProvider({ children }: { children: React.ReactNode }) {
             freeTripsUsed,
             freeTripLimit: FREE_TRIP_LIMIT,
             lastVerifiedAt: timestampToMillis(data?.lastVerifiedAt),
-          });
+          };
+
+          usePremiumStore.getState().setEntitlement(entitlement);
           usePremiumStore.getState().setEntitlementLoaded(true);
+          void cacheEntitlement(user.uid, entitlement);
+
+          // Keeps the `premium` user property on Analytics/Crashlytics in sync
+          // with the server-verified entitlement, so funnels and crash reports
+          // can be segmented by paid vs free.
+          void identifyUser({ uid: user.uid, premium });
+          } catch (err) {
+            // This callback is async, so a throw here becomes an unhandled
+            // rejection rather than reaching onSnapshot's error handler below.
+            // The SQLite read for the free-trip mirror is the realistic failure.
+            console.error("Failed to apply entitlement snapshot:", err);
+            await crash.recordError(err, { action: "entitlement_snapshot" });
+            usePremiumStore.getState().setEntitlementLoaded(true);
+          }
         },
         (err) => {
           console.error("Entitlement listener error:", err);
+          void crash.recordError(err, { action: "entitlement_listener" });
           usePremiumStore.getState().setEntitlementLoaded(true);
         }
       );
@@ -170,6 +257,9 @@ function RealBillingProvider({ children }: { children: React.ReactNode }) {
 
   const purchase = async (productId: string) => {
     usePremiumStore.getState().setPurchaseState("purchasing");
+    void analytics.logEvent(AnalyticsEvent.PURCHASE_START, {
+      product_id: productId,
+    });
 
     const offerToken = findOfferToken(subscriptionsRef.current, productId);
     if (!offerToken) {
@@ -209,7 +299,13 @@ function RealBillingProvider({ children }: { children: React.ReactNode }) {
       }
 
       await verifyAndFinish(relevant);
-      return { restored: usePremiumStore.getState().premium };
+      const restored = usePremiumStore.getState().premium;
+      if (restored) {
+        void analytics.logEvent(AnalyticsEvent.PURCHASE_RESTORED, {
+          product_id: relevant.productId,
+        });
+      }
+      return { restored };
     } catch (err: any) {
       usePremiumStore.getState().setPurchaseState("error", err?.message || "Couldn't restore purchases.");
       return { restored: false };

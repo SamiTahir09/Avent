@@ -1,48 +1,68 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  decrementLocalFreeTripsUsed,
+  getLocalFreeTripsUsed as dbGetFreeTripsUsed,
+  getTripsForUser,
+  incrementLocalFreeTripsUsed,
+  saveTrip,
+  setLocalFreeTripsUsed as dbSetFreeTripsUsed,
+} from "@/services/db/trips";
 
-// Free (non-premium) users get their trial trips tracked and stored fully
-// on-device, keyed by uid — no Cloud Functions or Firestore involved. This
-// keeps the free tier working even when the backend billing functions
-// haven't been deployed (see BILLING_SETUP.md). Once a user goes premium,
-// trip generation/storage switches to the Firestore flow in generate-trip.tsx.
+/**
+ * Free-tier trip storage.
+ *
+ * This used to keep trips and the trial counter in AsyncStorage. Both now live
+ * in SQLite (services/db/trips.ts) — the module survives as a thin wrapper so
+ * existing call sites keep working and there's still one obvious place that
+ * expresses "what the free tier is allowed to do".
+ *
+ * The counter here is a local mirror for instant/offline gating only. The
+ * authoritative count is `freeTripsUsed` on Firestore's Users/{uid}, written
+ * exclusively by the consumeFreeTrip Cloud Function via the Admin SDK (see
+ * firestore.rules) — that's what makes it tamper-proof.
+ */
+
 export const FREE_TRIP_LIMIT = 2;
 
-const usedKeyFor = (uid: string) => `avent_free_trips_used_${uid}`;
-const tripsKeyFor = (uid: string) => `avent_free_trips_data_${uid}`;
-
 export async function getLocalFreeTripsUsed(uid: string): Promise<number> {
-  try {
-    const raw = await AsyncStorage.getItem(usedKeyFor(uid));
-    return raw ? parseInt(raw, 10) || 0 : 0;
-  } catch {
-    return 0;
-  }
+  return dbGetFreeTripsUsed(uid);
 }
 
-export async function consumeLocalFreeTrip(
-  uid: string
-): Promise<{ allowed: boolean; reason: "free_trip" | "limit_reached"; used: number }> {
-  const used = await getLocalFreeTripsUsed(uid);
+export async function setLocalFreeTripsUsed(
+  uid: string,
+  used: number
+): Promise<void> {
+  return dbSetFreeTripsUsed(uid, used);
+}
+
+export async function consumeLocalFreeTrip(uid: string): Promise<{
+  allowed: boolean;
+  reason: "free_trip" | "limit_reached";
+  used: number;
+}> {
+  const used = await dbGetFreeTripsUsed(uid);
   if (used >= FREE_TRIP_LIMIT) {
     return { allowed: false, reason: "limit_reached", used };
   }
-
-  const next = used + 1;
-  await AsyncStorage.setItem(usedKeyFor(uid), String(next));
+  const next = await incrementLocalFreeTripsUsed(uid);
   return { allowed: true, reason: "free_trip", used: next };
 }
 
-export async function saveLocalTrip(uid: string, trip: TripRecord): Promise<void> {
-  const existing = await getLocalTrips(uid);
-  const withoutDupe = existing.filter((t) => t.docId !== trip.docId);
-  await AsyncStorage.setItem(tripsKeyFor(uid), JSON.stringify([...withoutDupe, trip]));
+/**
+ * Returns a free trip to the user. Called when generation or saving fails after
+ * the credit was already consumed — without this, two transient network errors
+ * would silently use up a user's entire free tier.
+ */
+export async function refundLocalFreeTrip(uid: string): Promise<number> {
+  return decrementLocalFreeTripsUsed(uid);
+}
+
+export async function saveLocalTrip(
+  uid: string,
+  trip: TripRecord
+): Promise<void> {
+  await saveTrip(trip, { userUid: uid, isFreeTrip: true });
 }
 
 export async function getLocalTrips(uid: string): Promise<TripRecord[]> {
-  try {
-    const raw = await AsyncStorage.getItem(tripsKeyFor(uid));
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+  return getTripsForUser({ uid });
 }

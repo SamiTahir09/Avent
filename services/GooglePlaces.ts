@@ -1,37 +1,22 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { kvGet, kvSet } from "@/services/db/kv";
 
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24; // 24 hours
 
 type LatLng = { lat: number; lng: number };
 
-type CachedEntry<T> = {
-  ts: number;
-  data: T;
-};
-
+// Photo results are cached in the SQLite `kv` table rather than AsyncStorage:
+// expiry is enforced by the store itself, so this file no longer has to
+// hand-roll a TTL check on every read.
 const cacheKey = (placeId: string) => `place_photos:${placeId}`;
 
-const getCached = async <T,>(placeId: string): Promise<T | null> => {
-  try {
-    const raw = await AsyncStorage.getItem(cacheKey(placeId));
-    if (!raw) return null;
-    const parsed: CachedEntry<T> = JSON.parse(raw);
-    if (Date.now() - parsed.ts > CACHE_TTL_MS) {
-      await AsyncStorage.removeItem(cacheKey(placeId));
-      return null;
-    }
-    return parsed.data;
-  } catch {
-    return null;
-  }
-};
+const getCached = async <T,>(placeId: string): Promise<T | null> =>
+  kvGet<T>(cacheKey(placeId));
 
 const setCached = async <T,>(placeId: string, data: T) => {
   try {
-    const entry: CachedEntry<T> = { ts: Date.now(), data };
-    await AsyncStorage.setItem(cacheKey(placeId), JSON.stringify(entry));
+    await kvSet(cacheKey(placeId), data, CACHE_TTL_MS);
   } catch {
-    // ignore
+    // Cache writes are best-effort — a failure here must not break the fetch.
   }
 };
 

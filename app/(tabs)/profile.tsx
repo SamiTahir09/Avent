@@ -6,6 +6,12 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import CustomButton from "@/components/CustomButton";
 import { usePremiumStore } from "@/store/premiumStore";
+import {
+  AnalyticsEvent,
+  analytics,
+  crash,
+  identifyUser,
+} from "@/services/telemetry";
 
 const PLAN_LABEL: Record<string, string> = {
   monthly: "Monthly",
@@ -18,12 +24,21 @@ const Profile = () => {
   const premium = usePremiumStore((s) => s.premium);
   const subscriptionType = usePremiumStore((s) => s.subscriptionType);
 
+  React.useEffect(() => {
+    void analytics.logScreenView("Profile");
+  }, []);
+
   const handleLogout = async () => {
     try {
+      void analytics.logEvent(AnalyticsEvent.LOGOUT);
       await auth.signOut();
+      // Detach the uid so a subsequent anonymous session's events and crashes
+      // aren't still attributed to the account that just signed out.
+      await identifyUser({ uid: null });
       router.replace("/(auth)/welcome");
     } catch (error) {
       console.error("Error signing out:", error);
+      await crash.recordError(error, { screen: "profile", action: "signOut" });
     }
   };
 
@@ -87,6 +102,21 @@ const Profile = () => {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Diagnostics — verifies SQLite, API keys and the Analytics/Crashlytics
+          pipeline from a real device. Dev builds only. */}
+      {__DEV__ && (
+        <TouchableOpacity
+          onPress={() => router.push("/diagnostics")}
+          className="flex-row items-center justify-between bg-gray-50 p-4 rounded-xl mb-4"
+        >
+          <View className="flex-row items-center">
+            <Ionicons name="pulse-outline" size={24} color="#8b5cf6" />
+            <Text className="ml-3 font-outfit">Diagnostics</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#8b5cf6" />
+        </TouchableOpacity>
+      )}
 
       {/* Logout Button */}
       <CustomButton

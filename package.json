@@ -10,6 +10,9 @@
     "ios": "expo start --ios --port 8082",
     "web": "expo start --web --port 8082",
     "test": "jest --watchAll",
+    "test:keys": "node scripts/test-api-keys.mjs",
+    "test:db": "node scripts/test-sqlite-schema.mjs",
+    "typecheck": "tsc --noEmit",
     "lint": "expo lint"
   },
   "jest": {
@@ -32,6 +35,7 @@
     "expo-linking": "~8.0.12",
     "expo-router": "~6.0.24",
     "expo-splash-screen": "~31.0.13",
+    "expo-sqlite": "~16.0.10",
     "expo-status-bar": "~3.0.9",
     "expo-system-ui": "~6.0.9",
     "expo-web-browser": "~15.0.11",

@@ -15,8 +15,8 @@ import "../global.css";
 import "react-native-get-random-values";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CreateTripContext } from "@/context/CreateTripContext";
-import { isDemoMode } from "@/config/env";
 import { startOfflineSyncListener } from "@/services/OfflineSync";
+import { initTelemetry } from "@/services/telemetry";
 import { BillingProvider } from "@/hooks/useBilling";
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -43,8 +43,17 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
+  // Runs before anything else so the global error handlers are installed while
+  // the rest of startup is still happening — an exception thrown during font
+  // loading or the first SQLite open would otherwise go unreported.
   useEffect(() => {
-    if (isDemoMode()) return;
+    void initTelemetry();
+  }, []);
+
+  // Drains the queued analytics events whenever connectivity returns. This runs
+  // in demo mode too: demo builds are exactly where you want crash and funnel
+  // data from testers.
+  useEffect(() => {
     const unsubscribe = startOfflineSyncListener();
     return unsubscribe;
   }, []);
@@ -71,6 +80,7 @@ export default function RootLayout() {
               <Stack.Screen name="location-details" />
               <Stack.Screen name="trip-details" />
               <Stack.Screen name="premium" options={{ presentation: "modal" }} />
+              <Stack.Screen name="diagnostics" />
             </Stack>
           </CreateTripContext.Provider>
         </BillingProvider>

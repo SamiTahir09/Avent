@@ -2,7 +2,10 @@ import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
 import { demoConsumeFreeTrip, demoPurchase } from "@/config/demoMode";
-import { consumeLocalFreeTrip } from "@/services/LocalFreeTrial";
+import {
+  consumeLocalFreeTrip,
+  refundLocalFreeTrip,
+} from "@/services/LocalFreeTrial";
 import { usePremiumStore } from "@/store/premiumStore";
 
 // Must match android.package in app.json.
@@ -67,6 +70,28 @@ export async function consumeFreeTrip(): Promise<ConsumeFreeTripResult> {
   const result = await consumeLocalFreeTrip(uid);
   usePremiumStore.getState().setEntitlement({ freeTripsUsed: result.used });
   return { allowed: result.allowed, reason: result.reason };
+}
+
+/**
+ * Undoes a `consumeFreeTrip` when the generation it paid for never completed.
+ * The credit has to be taken before the Gemini call — otherwise a deep link
+ * straight into the generate screen bypasses the gate — so the failure paths
+ * are responsible for giving it back. No-op for premium and demo users, who
+ * never had a credit deducted.
+ */
+export async function refundFreeTrip(): Promise<void> {
+  if (isDemoMode()) return;
+  if (usePremiumStore.getState().premium) return;
+
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
+
+  try {
+    const used = await refundLocalFreeTrip(uid);
+    usePremiumStore.getState().setEntitlement({ freeTripsUsed: used });
+  } catch (err) {
+    console.error("Failed to refund free trip:", err);
+  }
 }
 
 /**

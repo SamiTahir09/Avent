@@ -1,4 +1,4 @@
-import { View, Text, Image, TouchableOpacity, Alert } from "react-native";
+import { View, Text, Image, TouchableOpacity } from "react-native";
 import React, { useContext, useEffect, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useMutation } from "@tanstack/react-query";
@@ -6,17 +6,12 @@ import { CreateTripContext } from "@/context/CreateTripContext";
 import { AI_PROMPT } from "@/constants/Options";
 import { chatSession } from "@/config/GeminiConfig";
 import { useRouter } from "expo-router";
-import { doc, setDoc } from "firebase/firestore";
-import { auth, db } from "@/config/FirebaseConfig";
+import { auth } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
-import { demoSaveTrip } from "@/config/demoMode";
-import { isOnline, queueTripForSync } from "@/services/OfflineSync";
-import { saveLocalTrip } from "@/services/LocalFreeTrial";
-import { consumeFreeTrip } from "@/utils/purchaseVerification";
+import { generateTripId, saveTrip } from "@/services/db/trips";
+import { AnalyticsEvent, analytics, crash } from "@/services/telemetry";
+import { consumeFreeTrip, refundFreeTrip } from "@/utils/purchaseVerification";
 import { usePremiumStore } from "@/store/premiumStore";
-
-const generateTripId = () =>
-  `${Date.now().toString()}${Math.random().toString(36).slice(2, 8)}`;
 
 type GenerationStep = "prompting" | "enriching" | "saving";
 
@@ -84,6 +79,13 @@ const GenerateTrip = () => {
       }
     } catch (err) {
       console.error("Free trip check failed:", err);
+      await crash.recordError(err, {
+        screen: "generate-trip",
+        action: "consumeFreeTrip",
+      });
+      void analytics.logEvent(AnalyticsEvent.TRIP_GENERATE_FAILED, {
+        reason: "entitlement_check_failed",
+      });
       setLoading(false);
       setError("Couldn't verify your account. Please check your connection and try again.");
       return;
@@ -117,12 +119,35 @@ const GenerateTrip = () => {
       )
       .replace("{budget}", budget?.type || "");
 
+    void analytics.logEvent(AnalyticsEvent.TRIP_GENERATE_START, {
+      total_days: totalDays,
+      budget: budget?.type ?? null,
+      traveler_type: travelers?.type ?? null,
+      demo_mode: isDemoMode(),
+    });
+
     let tripResponse: any;
+    const generateStartedAt = Date.now();
     try {
       const result = await chatSession.sendMessage(FINAL_PROMPT);
       tripResponse = JSON.parse(result.response.text());
+      void analytics.logEvent(AnalyticsEvent.TRIP_GENERATE_SUCCESS, {
+        duration_ms: Date.now() - generateStartedAt,
+        total_days: totalDays,
+      });
     } catch (err: any) {
       console.error("AI trip generation failed:", err);
+      await crash.recordError(err, {
+        screen: "generate-trip",
+        action: "gemini_sendMessage",
+      });
+      void analytics.logEvent(AnalyticsEvent.TRIP_GENERATE_FAILED, {
+        reason: "gemini_error",
+        duration_ms: Date.now() - generateStartedAt,
+      });
+      // The free-trip credit was taken before this call, so give it back — two
+      // transient Gemini errors would otherwise consume a user's whole free tier.
+      await refundFreeTrip();
       setLoading(false);
       setError(
         err?.message?.includes("404") || err?.message?.includes("not found")
@@ -226,7 +251,13 @@ const GenerateTrip = () => {
         }
       }
     } catch (e) {
+      // Non-fatal: the itinerary is already usable, only images/coords are
+      // missing, so this is recorded rather than surfaced to the user.
       console.error("Error resolving assets during trip generation:", e);
+      await crash.recordError(e, {
+        screen: "generate-trip",
+        action: "enrich_assets",
+      });
     }
 
     setStep("saving");
@@ -240,61 +271,30 @@ const GenerateTrip = () => {
       docId: docId,
     };
 
-    if (isDemoMode()) {
-      try {
-        await demoSaveTrip(tripRecord);
-      } catch (saveErr) {
-        console.error("Error saving demo trip:", saveErr);
-        setLoading(false);
-        setError("Your itinerary was generated but couldn't be saved. Please try again.");
-        return;
-      }
-      setLoading(false);
-      router.replace("/(tabs)/mytrip");
-      return;
-    }
-
-    // Free (non-premium) users' trips are stored fully on-device — see
-    // services/LocalFreeTrial.ts — same as consumeFreeTrip's gate above, so
-    // neither the free tier's trial count nor its trip data ever depend on
-    // Firestore or Cloud Functions being deployed.
-    if (!usePremiumStore.getState().premium) {
-      try {
-        await saveLocalTrip(user!.uid, tripRecord);
-      } catch (saveErr) {
-        console.error("Error saving local trip:", saveErr);
-        setLoading(false);
-        setError("Your itinerary was generated but couldn't be saved. Please try again.");
-        return;
-      }
-      setLoading(false);
-      router.replace("/(tabs)/mytrip");
-      return;
-    }
-
-    const saveOfflineAndExit = async () => {
-      await queueTripForSync(tripRecord);
-      setLoading(false);
-      Alert.alert(
-        "Saved Offline",
-        "You're offline — this trip is saved on your device and will sync automatically once you're back online."
-      );
-      router.replace("/(tabs)/mytrip");
-    };
-
-    if (!(await isOnline())) {
-      await saveOfflineAndExit();
-      return;
-    }
-
+    // One write path for every tier. Demo, free and premium trips all go to the
+    // same SQLite table, so there's no online check, no Firestore write and no
+    // "saved offline, will sync later" state to explain to the user — the local
+    // database *is* the storage, not a cache in front of it.
+    const isPremium = usePremiumStore.getState().premium;
     try {
-      await setDoc(doc(db, "UserTrips", docId), tripRecord);
+      await saveTrip(tripRecord, {
+        userUid: user?.uid ?? null,
+        isFreeTrip: !isPremium,
+      });
+      void analytics.logEvent(AnalyticsEvent.TRIP_SAVED, {
+        premium: isPremium,
+        demo_mode: isDemoMode(),
+        total_days: totalDays,
+      });
     } catch (saveErr) {
-      console.error("Error saving trip:", saveErr);
-      if (!(await isOnline())) {
-        await saveOfflineAndExit();
-        return;
-      }
+      console.error("Error saving trip to SQLite:", saveErr);
+      await crash.recordError(saveErr, {
+        screen: "generate-trip",
+        action: "saveTrip",
+      });
+      // The itinerary exists but couldn't be persisted, so the user got nothing
+      // — refund the credit rather than charging them for a lost trip.
+      await refundFreeTrip();
       setLoading(false);
       setError("Your itinerary was generated but couldn't be saved. Please try again.");
       return;
