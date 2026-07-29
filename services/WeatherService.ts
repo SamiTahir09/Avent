@@ -26,7 +26,16 @@ export type WeatherInfo = {
   raw: any;
 };
 
-const WEATHERAPI_KEY = process.env.EXPO_PUBLIC_WEATHERAPI_KEY || "";
+// Babel inlines EXPO_PUBLIC_* at bundle time, so an empty value here means the
+// key was absent *when the bundle was built* — not at runtime. In a local dev
+// run that means .env; in a standalone/EAS build it means the key never reached
+// the build server (.env is gitignored, so EAS only sees eas.json + EAS
+// environment variables). See scripts/sync-eas-env.mjs.
+const WEATHERAPI_KEY = (process.env.EXPO_PUBLIC_WEATHERAPI_KEY || "").trim();
+
+const MISSING_KEY_MESSAGE = __DEV__
+  ? "Missing EXPO_PUBLIC_WEATHERAPI_KEY — add it to .env and restart Metro with `npx expo start -c`."
+  : "Missing EXPO_PUBLIC_WEATHERAPI_KEY in this build — push it to EAS with `npm run eas:env:push`, then rebuild.";
 
 const fetchFromWeatherAPI = async (
   lat: number,
@@ -34,7 +43,7 @@ const fetchFromWeatherAPI = async (
   days = 7
 ): Promise<WeatherInfo> => {
   if (!WEATHERAPI_KEY) {
-    throw new Error("Missing EXPO_PUBLIC_WEATHERAPI_KEY");
+    throw new Error(MISSING_KEY_MESSAGE);
   }
 
   const d = Math.max(1, Math.min(days, 10));
