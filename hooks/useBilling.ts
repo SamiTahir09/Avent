@@ -578,7 +578,23 @@ function DemoBillingProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function BillingProvider({ children }: { children: React.ReactNode }) {
-  return isDemoMode()
+  // The bypass is routed to the local provider as well, not just demo mode.
+  //
+  // With EXPO_PUBLIC_BILLING_BYPASS=true, `purchase()` never reaches Google Play
+  // in either provider — it grants premium from SQLite. But RealBillingProvider
+  // still calls `useIAP()`, which opens a Play Billing connection through
+  // expo-iap's native module. That module doesn't exist in Expo Go, so the
+  // provider throws there and takes the whole tree with it: the premium screen
+  // won't even mount, let alone grant premium.
+  //
+  // Since a bypass build has no use for the Play catalog or the purchase
+  // listener, mounting useIAP() only adds a failure mode. Sending it to the
+  // local provider makes the test flow behave identically in Expo Go and in a
+  // dev/EAS build. Turn the flag off and the real expo-iap path is restored
+  // untouched.
+  const useLocalBilling = isDemoMode() || isBillingBypassEnabled();
+
+  return useLocalBilling
     ? React.createElement(DemoBillingProvider, null, children)
     : React.createElement(RealBillingProvider, null, children);
 }
