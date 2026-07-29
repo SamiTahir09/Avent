@@ -35,8 +35,11 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {}
-     
-    }
+      "router": {},
+      "eas": {
+        "projectId": "fff0bdbd-3427-4f3c-9f59-2dc5bb553be7"
+      }
+    },
+    "owner": "sami001234"
   }
 }
