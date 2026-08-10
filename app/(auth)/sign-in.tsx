@@ -9,6 +9,7 @@ import { auth } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
 import { demoSignIn } from "@/config/demoMode";
 import DummyLogin from "@/components/DummyLogin";
+import { isEmailVerified, sendVerificationEmail } from "@/services/auth/emailGate";
 import {
   AnalyticsEvent,
   analytics,
@@ -58,6 +59,21 @@ const SignIn = () => {
       await identifyUser({ uid: userCredential.user.uid });
       void analytics.logEvent(AnalyticsEvent.LOGIN, { method: "password" });
 
+      // Credentials were right but the address was never confirmed — the
+      // account stays parked on the verify screen. Sending here (cooldown
+      // permitting) covers the common case of a sign-up whose original email
+      // was lost or expired.
+      if (!isEmailVerified(userCredential.user)) {
+        const sendResult = await sendVerificationEmail(userCredential.user);
+        if (sendResult.sent) {
+          void analytics.logEvent(AnalyticsEvent.EMAIL_VERIFICATION_SENT, {
+            trigger: "sign_in",
+          });
+        }
+        router.replace("/(auth)/verify-email");
+        return;
+      }
+
       router.replace("/(tabs)/mytrip");
     } catch (error: any) {
       void analytics.logEvent(AnalyticsEvent.AUTH_ERROR, {
@@ -77,6 +93,13 @@ const SignIn = () => {
           break;
         case "auth/wrong-password":
           alert("Incorrect password");
+          break;
+        // What Firebase actually returns once email-enumeration protection is
+        // on (the default for new projects): the wrong-password and
+        // user-not-found cases above collapse into this one deliberately, so
+        // the error can't be used to probe which addresses are registered.
+        case "auth/invalid-credential":
+          alert("Incorrect email or password");
           break;
         default:
           alert("Error signing in: " + error.message);

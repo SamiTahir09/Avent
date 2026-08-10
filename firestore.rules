@@ -8,6 +8,24 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Signed in with a confirmed email address.
+    //
+    // The client keeps unverified accounts on (auth)/verify-email, but that is
+    // only a UI gate — a modified build or a plain REST call with a valid ID
+    // token would sail past it. This is the enforcement: `email_verified` is a
+    // claim Firebase mints into the token, so a throwaway address can hold an
+    // Auth row and still touch no data at all.
+    //
+    // Caveat that matters when debugging: this reads the *token*, which is
+    // cached for up to an hour. A user who has just clicked the link still
+    // carries a token saying false until it is refreshed, which is why the app
+    // forces getIdToken(true) before letting them in — see
+    // services/auth/emailGate.ts.
+    function isVerified() {
+      return request.auth != null
+        && request.auth.token.email_verified == true;
+    }
+
     // Premium/entitlement + free-trip-usage record for each account.
     // Every field here (including freeTripsUsed) is written exclusively by
     // Cloud Functions via the Admin SDK, which bypasses these rules entirely —
@@ -15,7 +33,7 @@ service cloud.firestore {
     // trip counter and the `premium` flag tamper-proof against a client that
     // tries to write directly to Firestore.
     match /Users/{userId} {
-      allow get: if request.auth != null && request.auth.uid == userId;
+      allow get: if isVerified() && request.auth.uid == userId;
       allow list: if false;
       allow create, update, delete: if false;
     }
@@ -24,9 +42,9 @@ service cloud.firestore {
     // email (matches the existing query/write pattern in
     // app/(tabs)/mytrip.tsx and app/generate-trip.tsx).
     match /UserTrips/{tripId} {
-      allow read: if request.auth != null
+      allow read: if isVerified()
         && request.auth.token.email == resource.data.userEmail;
-      allow create: if request.auth != null
+      allow create: if isVerified()
         && request.auth.token.email == request.resource.data.userEmail;
       allow update, delete: if false;
     }

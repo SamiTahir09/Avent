@@ -3,6 +3,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db } from "./admin";
 import { verifyPurchaseWithPlay } from "./playDeveloperApi";
 import { VerifyPurchaseRequest, VerifyPurchaseResponse } from "./types";
+import { requireVerifiedCaller } from "./requireVerifiedCaller";
 
 const KNOWN_PRODUCT_IDS = new Set([
   "premium_monthly",
@@ -26,10 +27,7 @@ const toTimestampOrNull = (epochMillis: number | null) =>
  */
 export const verifyPurchase = onCall<VerifyPurchaseRequest, Promise<VerifyPurchaseResponse>>(
   async (request) => {
-    const uid = request.auth?.uid;
-    if (!uid) {
-      throw new HttpsError("unauthenticated", "You must be signed in to verify a purchase.");
-    }
+    const uid = requireVerifiedCaller(request, "verify a purchase");
 
     const { productId, purchaseToken, packageName } = request.data ?? {};
     if (!productId || !purchaseToken || !packageName) {

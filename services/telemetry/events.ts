@@ -14,6 +14,9 @@ export const AnalyticsEvent = {
   LOGIN: "login",
   LOGOUT: "logout",
   AUTH_ERROR: "auth_error",
+  EMAIL_VERIFICATION_SENT: "email_verification_sent",
+  EMAIL_VERIFICATION_PENDING: "email_verification_pending",
+  EMAIL_VERIFIED: "email_verified",
 
   // Trip funnel
   TRIP_FLOW_START: "trip_flow_start",
@@ -39,6 +42,17 @@ export const AnalyticsEvent = {
   WEATHER_VIEWED: "weather_viewed",
   PACKING_SUGGESTIONS_VIEWED: "packing_suggestions_viewed",
   LOCATION_DETAILS_VIEWED: "location_details_viewed",
+
+  // Google Drive backup
+  BACKUP_CONNECTED: "backup_connected",
+  BACKUP_DISCONNECTED: "backup_disconnected",
+  BACKUP_START: "backup_start",
+  BACKUP_SUCCESS: "backup_success",
+  BACKUP_FAILED: "backup_failed",
+  BACKUP_DELETED: "backup_deleted",
+  RESTORE_START: "restore_start",
+  RESTORE_SUCCESS: "restore_success",
+  RESTORE_FAILED: "restore_failed",
 
   // Infrastructure
   SCREEN_VIEW: "screen_view",
