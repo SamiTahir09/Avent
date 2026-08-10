@@ -105,7 +105,7 @@ npx expo install @react-native-firebase/app \
 
 Download the config files from the Firebase console and put them in the project root:
 
-- **Android:** Project Settings → Your apps → Android app (`com.samiitahir.avent`) → `google-services.json`
+- **Android:** Project Settings → Your apps → Android app (`com.Tripplanner.company`) → `google-services.json`
 - **iOS:** the iOS app → `GoogleService-Info.plist`
 
 You will need to *register* an Android app in the Firebase project first — right now only a Web app exists, which is why the JS SDK works but native does not.
@@ -145,7 +145,7 @@ Once installed, `services/telemetry/nativeFirebase.ts` finds the modules and eve
 2. **Send test crash.** Force-closes the app. **Reopen the app** — Crashlytics uploads reports on the *next* launch, not at crash time. This confuses everyone the first time.
 3. Debug-mode analytics on Android:
    ```bash
-   adb shell setprop debug.firebase.analytics.app com.samiitahir.avent
+   adb shell setprop debug.firebase.analytics.app com.Tripplanner.company
    ```
    Events then show up live in Firebase → Analytics → DebugView.
 
@@ -229,7 +229,7 @@ Found during the billing-bypass review and fixed in the same pass:
 
 | Service | Status | Detail |
 |---|---|---|
-| Firebase Auth | **Working** | Key valid, project `avent-2222e`, authorized domains present |
+| Firebase Auth | **Working** | Key valid, project `avent-ab2ac`, authorized domains present |
 | Gemini | **Working** | `gemini-2.5-flash` available |
 | Google Places | **BROKEN** | `REQUEST_DENIED` — *"You must enable Billing on the Google Cloud Project"* |
 | Google Geocoding | **BROKEN** | `REQUEST_DENIED` — *"This API is not activated on your API project"* |
@@ -242,7 +242,7 @@ Found during the billing-bypass review and fixed in the same pass:
 
 1. https://console.cloud.google.com → your project → Billing → link a billing account.
 2. APIs & Services → Library → enable **Places API**, **Geocoding API**, **Maps SDK for Android**, **Maps SDK for iOS**.
-3. Credentials → your key → Application restrictions. For Android add package `com.samiitahir.avent` + your SHA-1. Under API restrictions, allow exactly the four APIs above.
+3. Credentials → your key → Application restrictions. For Android add package `com.Tripplanner.company` + your SHA-1. Under API restrictions, allow exactly the four APIs above.
 4. Re-check from the device: **Profile → Diagnostics → Run API key checks**. Do this on-device, not just from the terminal — platform restrictions only fail from the real app.
 
 **Firestore rules** — the repo has correct rules that were never pushed:

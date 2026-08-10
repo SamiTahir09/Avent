@@ -52,7 +52,7 @@ not enough — you'll see "native module not found" errors if you forget this.
 ## 3. Google Play Console setup
 
 1. **Create the app** in [Play Console](https://play.google.com/console) with
-   package name `com.samiitahir.avent` (must match `app.json` →
+   package name `com.Tripplanner.company` (must match `app.json` →
    `expo.android.package`).
 2. **Complete the app's store listing, content rating, and data safety
    sections** — Play won't allow billing testing on an app that hasn't
@@ -131,7 +131,7 @@ collection.
 
 ### Wiring the real Google Play Developer API call
 
-1. In Google Cloud Console (same project as Firebase — `avent-2222e`), find
+1. In Google Cloud Console (same project as Firebase — `avent-ab2ac`), find
    the Cloud Functions runtime service account (Cloud Functions → your
    function → Details → "Service account", or the App Engine default service
    account `PROJECT_ID@appspot.gserviceaccount.com`).

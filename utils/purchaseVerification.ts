@@ -9,7 +9,7 @@ import {
 import { usePremiumStore } from "@/store/premiumStore";
 
 // Must match android.package in app.json.
-const PACKAGE_NAME = "com.samiitahir.avent";
+const PACKAGE_NAME = "com.Tripplanner.company";
 
 const RETRYABLE_CODES = new Set(["unavailable", "deadline-exceeded", "internal"]);
 

@@ -136,7 +136,7 @@ export async function runTelemetrySelfTest(): Promise<{
       path: "native",
       detail:
         "Sent via @react-native-firebase/analytics. Check Firebase console → Analytics → DebugView " +
-        "(enable debug mode with: adb shell setprop debug.firebase.analytics.app com.samiitahir.avent).",
+        "(enable debug mode with: adb shell setprop debug.firebase.analytics.app com.Tripplanner.company).",
     };
   }
 

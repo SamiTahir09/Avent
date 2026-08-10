@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1017431764960",
+    "project_id": "avent-ab2ac",
+    "storage_bucket": "avent-ab2ac.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1017431764960:android:a1f28e7f5f5082e2290585",
+        "android_client_info": {
+          "package_name": "com.Tripplanner.company"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBmkmE_P4x3HhOG1FIYp3ALi3ag0rLV4cs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

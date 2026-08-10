@@ -20,7 +20,8 @@
         "foregroundImage": "./assets/images/travel.logo.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.samiitahir.avent"
+      "package": "com.Tripplanner.company",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro",
@@ -29,7 +30,17 @@
     },
     "plugins": [
       "expo-router",
-      "expo-iap"
+      "expo-iap",
+      "@react-native-firebase/app",
+      "@react-native-firebase/crashlytics",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
