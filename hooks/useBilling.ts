@@ -9,7 +9,16 @@ import {
   type ProductSubscription,
   type Purchase,
 } from "expo-iap";
-import { auth, db, onAuthStateChanged } from "@/config/FirebaseConfig";
+import {
+  auth,
+  db,
+  onAuthStateChanged,
+  onIdTokenChanged,
+} from "@/config/FirebaseConfig";
+import {
+  getTokenVerification,
+  isEmailVerified,
+} from "@/services/auth/emailGate";
 import { isDemoMode } from "@/config/env";
 import { demoGetEntitlement, demoPurchase, demoRestore } from "@/config/demoMode";
 import { FREE_TRIP_LIMIT, getLocalFreeTripsUsed } from "@/services/LocalFreeTrial";
@@ -60,9 +69,19 @@ async function cacheEntitlement(uid: string, entitlement: UserEntitlement) {
   }
 }
 
-async function hydrateEntitlementFromCache(uid: string): Promise<boolean> {
+/**
+ * `isCurrent` is checked after the SQLite read and before any store write: on a
+ * slow first `getDb()` open this read can still be in flight when a different
+ * account signs in, and writing then would show the previous user's premium flag
+ * to the new one — for the whole session if there is no network to correct it.
+ */
+async function hydrateEntitlementFromCache(
+  uid: string,
+  isCurrent: () => boolean = () => true
+): Promise<boolean> {
   try {
     const cached = await kvGet<UserEntitlement>(ENTITLEMENT_CACHE_KEY(uid));
+    if (!isCurrent()) return false;
     if (!cached) {
       // Explicitly fall back to free tier rather than returning early. An
       // in-flight snapshot callback from the *previous* account can resume after
@@ -234,12 +253,38 @@ function RealBillingProvider({ children }: { children: React.ReactNode }) {
   // flag.
   useEffect(() => {
     let unsubscribeSnapshot: (() => void) | undefined;
+    /**
+     * Serialises overlapping callbacks. This handler awaits SQLite before it
+     * attaches the listener, and verification fires two token notifications a
+     * few hundred ms apart — so a second callback could enter, see
+     * `unsubscribeSnapshot` still undefined, and attach a second listener whose
+     * handle then overwrote the first. The orphan was never torn down: it
+     * outlived sign-out and reported permission-denied on every later token
+     * event. A stale callback now bows out instead.
+     */
+    let generation = 0;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user: any) => {
+    // onIdTokenChanged, not onAuthStateChanged: an account that verifies its
+    // email does not change auth state, so the latter would never fire and the
+    // listener below would stay unattached until the next cold start. The
+    // forced token refresh after verification does fire this one.
+    const unsubscribeAuth = onIdTokenChanged(auth, async (user: any) => {
+      const myGeneration = ++generation;
       unsubscribeSnapshot?.();
       unsubscribeSnapshot = undefined;
 
-      if (!user) {
+      // An account that has never verified is treated exactly like a signed-out
+      // one: it cannot reach the paywall, and the Firestore rules now deny it
+      // Users/{uid}, so subscribing would hand every gated account a
+      // permission-denied straight into the listener's error path — a
+      // Crashlytics report per launch for behaviour that is working correctly.
+      //
+      // This is the *object* check, which never touches the network. The token
+      // check is further down, deliberately: it can require a round trip, and
+      // nothing that can fail offline belongs in front of the cached-entitlement
+      // hydration below.
+      if (!user || !isEmailVerified(user)) {
+        if (myGeneration !== generation) return;
         usePremiumStore.getState().reset();
         return;
       }
@@ -258,12 +303,13 @@ function RealBillingProvider({ children }: { children: React.ReactNode }) {
         const localGrant = isBillingBypassEnabled()
           ? await getLocalPremium(uid)
           : null;
+        const isCurrent = () => myGeneration === generation;
         if (localGrant?.premium) {
-          applyEntitlement(localGrant, uid);
+          if (isCurrent()) applyEntitlement(localGrant, uid);
         } else {
           // Seed from the cached entitlement so the paywall gates correctly
           // before (or entirely without) a Firestore response.
-          await hydrateEntitlementFromCache(uid);
+          await hydrateEntitlementFromCache(uid, isCurrent);
         }
       } catch (err) {
         console.error("Failed to hydrate entitlement:", err);
@@ -271,10 +317,53 @@ function RealBillingProvider({ children }: { children: React.ReactNode }) {
         usePremiumStore.getState().setEntitlementLoaded(true);
       }
 
+      // Now — after the cache is in place — the token itself.
+      //
+      // `reload()` flips `emailVerified` and notifies listeners while the cached
+      // token still says otherwise, so the object check above is not enough to
+      // keep the listener off a token the rules will reject. Attaching on that
+      // first notification would eat the very permission-denied this avoids; the
+      // forced refresh in emailGate.ts fires a second notification carrying a
+      // token that passes, and that is the one that attaches.
+      //
+      // "unknown" means the check itself couldn't complete — an expired token
+      // with no connection. That is not evidence of anything, and treating it as
+      // unverified would strand a paying subscriber on free tier every time they
+      // opened the app offline: entitlement reset, cache never read, free-trip
+      // credits burned on trips they already paid for. Offline, an attached
+      // listener simply doesn't deliver; a wrongly-reset entitlement charges
+      // someone twice. So "unknown" proceeds.
+      const tokenState = await getTokenVerification(user);
+      if (myGeneration !== generation) return;
+      if (tokenState === "unverified") {
+        // No reset: the hydration above may have restored a real entitlement
+        // from cache, and this branch is about a stale token, not a stale
+        // entitlement. Just don't attach — a refreshed notification is coming.
+        usePremiumStore.getState().setEntitlementLoaded(true);
+        return;
+      }
+
       unsubscribeSnapshot = onSnapshot(
         doc(db, "Users", uid),
         async (snap) => {
           try {
+          // Offline, with nothing in Firestore's memory cache, the SDK still
+          // delivers a snapshot: `exists() === false`, `fromCache === true`.
+          // Read literally that says "no entitlement doc", and the code below
+          // would dutifully write free tier into the store *and* overwrite the
+          // SQLite cache with `premium: false` — destroying the very fallback
+          // that exists to keep a paying subscriber premium on a plane. They
+          // would then burn free-trip credits on trips they had already paid
+          // for, and the damage would survive the next launch.
+          //
+          // A missing doc read from the server is real (the Users doc is created
+          // lazily) and still handled below. A missing doc read from an empty
+          // cache is not information.
+          if (!snap.exists() && snap.metadata.fromCache) {
+            usePremiumStore.getState().setEntitlementLoaded(true);
+            return;
+          }
+
           const data = snap.data();
           const premium = !!data?.premium;
           // Free users' trial count lives on-device (see

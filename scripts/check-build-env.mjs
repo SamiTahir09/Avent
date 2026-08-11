@@ -36,6 +36,13 @@ const OPTIONAL = {
   // Telemetry degrades to a local SQLite queue when this is absent.
   EXPO_PUBLIC_GA4_API_SECRET:
     "optional — without it analytics queues locally instead of posting to GA4",
+  // The Profile screen hides the Google Drive backup card entirely when the
+  // client id for the current platform is absent, so a build without these is
+  // a build without backup, not a broken build.
+  EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID:
+    "optional — without it the Google Drive backup card is hidden on Android",
+  EXPO_PUBLIC_GOOGLE_OAUTH_IOS_CLIENT_ID:
+    "optional — without it the Google Drive backup card is hidden on iOS",
 };
 
 /** Keys that are only ever read as a fallback for another key. */

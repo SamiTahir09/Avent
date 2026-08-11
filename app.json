@@ -1,11 +1,14 @@
 {
   "expo": {
     "name": "Avent",
-    "slug": "avent",
+    "slug": "trip-planner",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": [
+      "myapp",
+      "com.googleusercontent.apps.1017431764960-pgedevik4f2vofqkn74q9o7cm9esq5vh"
+    ],
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/splash.png",
@@ -48,9 +51,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "fff0bdbd-3427-4f3c-9f59-2dc5bb553be7"
+        "projectId": "c59a5ec3-2364-4394-8760-383036fe4e25"
       }
     },
-    "owner": "sami001234"
+    "owner": "samiitahir"
   }
 }

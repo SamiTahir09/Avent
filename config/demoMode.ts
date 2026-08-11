@@ -5,6 +5,12 @@ const USER_KEY = "avent_demo_user";
 export type DemoUser = {
   email: string | null;
   uid: string;
+  /**
+   * Demo accounts are verified by fiat. There is no mailbox behind a demo
+   * address, so a verification gate would lock demo builds out of the app they
+   * exist to demonstrate. See services/auth/emailGate.ts.
+   */
+  emailVerified: true;
   metadata: {
     creationTime: string;
     lastSignInTime: string;
@@ -14,15 +20,32 @@ export type DemoUser = {
 let currentUser: DemoUser | null = null;
 const authListeners = new Set<(user: DemoUser | null) => void>();
 
+/**
+ * Whether the stored demo user has been read back yet.
+ *
+ * Without this, a listener subscribing during startup was answered
+ * synchronously with `null` — indistinguishable from "signed out" — and the
+ * route guard promptly ejected a perfectly good demo session to Welcome, with
+ * no second emission to correct it once storage came back.
+ */
+let hydrated = false;
+
 async function loadStoredUser() {
   try {
     const raw = await AsyncStorage.getItem(USER_KEY);
     if (raw) {
-      currentUser = JSON.parse(raw);
-      authListeners.forEach((cb) => cb(currentUser));
+      // emailVerified is forced on rather than trusted from storage: a record
+      // written by a build from before the verification gate existed has no
+      // such field, and a demo user must never land on the verify screen.
+      currentUser = { ...JSON.parse(raw), emailVerified: true };
     }
   } catch {
     currentUser = null;
+  } finally {
+    // Always, including the empty and failed cases: anyone who subscribed
+    // before now is still waiting for their first answer.
+    hydrated = true;
+    notifyAuthListeners();
   }
 }
 
@@ -36,6 +59,14 @@ export const demoAuth = {
   get currentUser() {
     return currentUser;
   },
+  /**
+   * Alias of onAuthStateChanged. Real Firebase distinguishes the two (token
+   * refresh fires only the latter); demo mode has no tokens, so one listener
+   * set serves both and consumers can subscribe to either.
+   */
+  onIdTokenChanged(_auth: unknown, callback?: (user: DemoUser | null) => void) {
+    return demoAuth.onAuthStateChanged(_auth, callback);
+  },
   onAuthStateChanged(_auth: unknown, callback?: (user: DemoUser | null) => void) {
     let cb = callback;
     if (typeof _auth === "function") {
@@ -43,7 +74,10 @@ export const demoAuth = {
     }
     if (!cb) return () => {};
     authListeners.add(cb);
-    cb(currentUser);
+    // Before hydration the honest answer is "don't know yet", and there is no
+    // way to say that through this API — so say nothing. loadStoredUser()
+    // notifies every listener as soon as it has the real answer.
+    if (hydrated) cb(currentUser);
     return () => {
       authListeners.delete(cb!);
     };
@@ -67,6 +101,7 @@ export async function demoSignIn(email: string, _password: string) {
   currentUser = {
     email,
     uid: existingUid ?? `demo-${Date.now()}`,
+    emailVerified: true,
     metadata: {
       creationTime: existing?.metadata?.creationTime ?? now,
       lastSignInTime: now,
