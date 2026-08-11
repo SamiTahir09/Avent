@@ -143,6 +143,14 @@ const SignIn = () => {
             value={form.password}
             onChangeText={(value) => setForm({ ...form, password: value })}
           />
+
+          <Link
+            href="/(auth)/forgot-password"
+            className="text-right font-outfit-medium mb-2"
+          >
+            <Text className="text-purple-500">Forgot password?</Text>
+          </Link>
+
           <CustomButton
             title={isLoading ? "Logging In..." : "Log In"}
             onPress={onLoginPress}

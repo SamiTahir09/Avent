@@ -7,6 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import CustomButton from "@/components/CustomButton";
 import GoogleBackupCard from "@/components/GoogleBackupCard";
 import { usePremiumStore } from "@/store/premiumStore";
+import { requestPasswordReset } from "@/services/auth/passwordReset";
 import {
   AnalyticsEvent,
   analytics,
@@ -24,10 +25,40 @@ const Profile = () => {
   const user = auth.currentUser;
   const premium = usePremiumStore((s) => s.premium);
   const subscriptionType = usePremiumStore((s) => s.subscriptionType);
+  const [isSendingReset, setIsSendingReset] = React.useState(false);
 
   React.useEffect(() => {
     void analytics.logScreenView("Profile");
   }, []);
+
+  const handleChangePassword = async () => {
+    if (isSendingReset || !user?.email) return;
+
+    setIsSendingReset(true);
+    try {
+      const result = await requestPasswordReset(user.email);
+      if (result.sent) {
+        void analytics.logEvent(AnalyticsEvent.PASSWORD_RESET_REQUESTED, {
+          trigger: "profile",
+        });
+        alert(`A password reset link was sent to ${user.email}.`);
+      } else {
+        void analytics.logEvent(AnalyticsEvent.PASSWORD_RESET_FAILED, {
+          trigger: "profile",
+          message: result.message,
+        });
+        alert(result.message);
+      }
+    } catch (error) {
+      await crash.recordError(error, {
+        screen: "profile",
+        action: "changePassword",
+      });
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setIsSendingReset(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -99,7 +130,7 @@ const Profile = () => {
             <Text className="text-gray-500 font-outfit">{user?.email}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity className="flex-row items-center justify-between bg-gray-50 p-4 rounded-xl">
+          <TouchableOpacity className="flex-row items-center justify-between bg-gray-50 p-4 rounded-xl mb-3">
             <View className="flex-row items-center">
               <Ionicons name="time-outline" size={24} color="#8b5cf6" />
               <Text className="ml-3 font-outfit">Last Sign In</Text>
@@ -107,6 +138,20 @@ const Profile = () => {
             <Text className="text-gray-500 font-outfit">
               {new Date(user?.metadata.lastSignInTime!).toLocaleDateString()}
             </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleChangePassword}
+            disabled={isSendingReset}
+            className="flex-row items-center justify-between bg-gray-50 p-4 rounded-xl"
+          >
+            <View className="flex-row items-center">
+              <Ionicons name="key-outline" size={24} color="#8b5cf6" />
+              <Text className="ml-3 font-outfit">
+                {isSendingReset ? "Sending..." : "Change Password"}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#8b5cf6" />
           </TouchableOpacity>
         </View>
 

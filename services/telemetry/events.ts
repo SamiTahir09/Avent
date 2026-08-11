@@ -17,6 +17,8 @@ export const AnalyticsEvent = {
   EMAIL_VERIFICATION_SENT: "email_verification_sent",
   EMAIL_VERIFICATION_PENDING: "email_verification_pending",
   EMAIL_VERIFIED: "email_verified",
+  PASSWORD_RESET_REQUESTED: "password_reset_requested",
+  PASSWORD_RESET_FAILED: "password_reset_failed",
 
   // Trip funnel
   TRIP_FLOW_START: "trip_flow_start",
