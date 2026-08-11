@@ -44,19 +44,7 @@ const SYNCED_KEYS = [
   "EXPO_PUBLIC_GOOGLE_MAP_KEY",
   "EXPO_PUBLIC_UNSPLASH_ACCESS_KEY",
   "EXPO_PUBLIC_WEATHERAPI_KEY",
-  "EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID",
-  "EXPO_PUBLIC_GOOGLE_OAUTH_IOS_CLIENT_ID",
 ];
-
-/**
- * Keys the app runs fine without. They are still pushed when present, but a
- * missing value is reported as a note rather than failing the dry run — an
- * iOS-only client id is genuinely irrelevant to an Android-only build.
- */
-const OPTIONAL_KEYS = new Set([
-  "EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID",
-  "EXPO_PUBLIC_GOOGLE_OAUTH_IOS_CLIENT_ID",
-]);
 
 /** Set in eas.json instead — listed so the script can explain the omission. */
 const PINNED_IN_EAS_JSON = [
@@ -132,10 +120,7 @@ for (const k of present) {
   console.log(`  ${GREEN}✓${RESET} ${k.padEnd(42)} ${DIM}${mask(env[k])}${RESET}`);
 }
 for (const k of missing) {
-  const optional = OPTIONAL_KEYS.has(k);
-  console.log(
-    `  ${optional ? YELLOW : RED}${optional ? "–" : "✗"}${RESET} ${k.padEnd(42)} ${DIM}not set in .env — will be skipped${optional ? " (optional)" : ""}${RESET}`
-  );
+  console.log(`  ${RED}✗${RESET} ${k.padEnd(42)} ${DIM}not set in .env — will be skipped${RESET}`);
 }
 console.log(
   `\n${DIM}Pinned in eas.json, not synced: ${PINNED_IN_EAS_JSON.join(", ")}${RESET}`
@@ -145,7 +130,7 @@ if (!apply) {
   console.log(
     `\n${YELLOW}Dry run.${RESET} Re-run with ${BOLD}--apply${RESET} to push these to EAS.`
   );
-  process.exit(missing.some((k) => !OPTIONAL_KEYS.has(k)) ? 1 : 0);
+  process.exit(missing.length ? 1 : 0);
 }
 
 if (!present.length) {

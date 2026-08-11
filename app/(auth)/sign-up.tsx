@@ -9,7 +9,6 @@ import { auth } from "@/config/FirebaseConfig";
 import { isDemoMode } from "@/config/env";
 import { demoSignUp } from "@/config/demoMode";
 import DummyLogin from "@/components/DummyLogin";
-import { sendVerificationEmail } from "@/services/auth/emailGate";
 import {
   AnalyticsEvent,
   analytics,
@@ -57,26 +56,7 @@ const SignUp = () => {
       await identifyUser({ uid: userCredential.user.uid });
       void analytics.logEvent(AnalyticsEvent.SIGN_UP, { method: "password" });
 
-      // The account now exists but is inert: Firestore rules and the callable
-      // functions both refuse an unverified token, so nothing can be created
-      // under it until the link below is clicked. `force` skips the resend
-      // cooldown — a brand new account has no prior send to throttle against.
-      const sendResult = await sendVerificationEmail(userCredential.user, {
-        force: true,
-      });
-      if (sendResult.sent) {
-        void analytics.logEvent(AnalyticsEvent.EMAIL_VERIFICATION_SENT, {
-          trigger: "sign_up",
-        });
-      } else if (sendResult.reason === "error") {
-        // Surfaced rather than swallowed: otherwise the user waits for an email
-        // that was never sent, with a Resend button as the only way out.
-        alert(
-          `Account created, but the verification email failed to send: ${sendResult.message}`
-        );
-      }
-
-      router.replace("/(auth)/verify-email");
+      router.replace("/(tabs)/mytrip");
     } catch (error: any) {
       void analytics.logEvent(AnalyticsEvent.AUTH_ERROR, {
         action: "sign_up",

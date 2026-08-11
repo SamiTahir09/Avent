@@ -1,8 +1,7 @@
-import { onCall } from "firebase-functions/v2/https";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "./admin";
 import { ConsumeFreeTripResponse } from "./types";
-import { requireVerifiedCaller } from "./requireVerifiedCaller";
 
 const DEFAULT_FREE_TRIP_LIMIT = 2;
 
@@ -14,7 +13,13 @@ const DEFAULT_FREE_TRIP_LIMIT = 2;
  */
 export const consumeFreeTrip = onCall<void, Promise<ConsumeFreeTripResponse>>(
   async (request) => {
-    const uid = requireVerifiedCaller(request, "generate a trip");
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError(
+        "unauthenticated",
+        "You must be signed in to generate a trip."
+      );
+    }
 
     const userRef = db.collection("Users").doc(uid);
 

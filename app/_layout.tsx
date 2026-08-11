@@ -19,7 +19,6 @@ import { startOfflineSyncListener } from "@/services/OfflineSync";
 import { initTelemetry } from "@/services/telemetry";
 import { assertBypassSafety } from "@/services/billing/localEntitlement";
 import { BillingProvider } from "@/hooks/useBilling";
-import AuthGate from "@/components/AuthGate";
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
@@ -73,22 +72,20 @@ export default function RootLayout() {
         <BillingProvider>
           <CreateTripContext.Provider value={{ tripData, setTripData }}>
             <StatusBar style="dark" />
-            <AuthGate>
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="index" />
-                <Stack.Screen name="(auth)" />
-                <Stack.Screen name="(tabs)" />
-                <Stack.Screen name="create-trip" />
-                <Stack.Screen name="generate-trip" />
-                <Stack.Screen name="weather-details" />
-                <Stack.Screen name="weather-week" />
-                <Stack.Screen name="weather-outfit" />
-                <Stack.Screen name="location-details" />
-                <Stack.Screen name="trip-details" />
-                <Stack.Screen name="premium" options={{ presentation: "modal" }} />
-                <Stack.Screen name="diagnostics" />
-              </Stack>
-            </AuthGate>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="create-trip" />
+              <Stack.Screen name="generate-trip" />
+              <Stack.Screen name="weather-details" />
+              <Stack.Screen name="weather-week" />
+              <Stack.Screen name="weather-outfit" />
+              <Stack.Screen name="location-details" />
+              <Stack.Screen name="trip-details" />
+              <Stack.Screen name="premium" options={{ presentation: "modal" }} />
+              <Stack.Screen name="diagnostics" />
+            </Stack>
           </CreateTripContext.Provider>
         </BillingProvider>
       </SafeAreaProvider>

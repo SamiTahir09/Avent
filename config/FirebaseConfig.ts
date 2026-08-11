@@ -6,7 +6,6 @@ let db: any;
 let app: any;
 let functionsInstance: any;
 let onAuthStateChanged: any;
-let onIdTokenChanged: any;
 
 if (isDemoMode()) {
   auth = demoAuth;
@@ -16,16 +15,12 @@ if (isDemoMode()) {
   onAuthStateChanged = (_auth: any, callback: any) => {
     return demoAuth.onAuthStateChanged(_auth, callback);
   };
-  onIdTokenChanged = (_auth: any, callback: any) => {
-    return demoAuth.onIdTokenChanged(_auth, callback);
-  };
 } else {
   const { initializeApp } = require("firebase/app");
   const {
     initializeAuth,
     getReactNativePersistence,
     onAuthStateChanged: firebaseOnAuthStateChanged,
-    onIdTokenChanged: firebaseOnIdTokenChanged,
   } = require("firebase/auth");
   const AsyncStorage =
     require("@react-native-async-storage/async-storage").default;
@@ -49,18 +44,6 @@ if (isDemoMode()) {
   db = getFirestore(app);
   functionsInstance = getFunctions(app);
   onAuthStateChanged = firebaseOnAuthStateChanged;
-  onIdTokenChanged = firebaseOnIdTokenChanged;
 }
 
-export {
-  app,
-  auth,
-  db,
-  functionsInstance as functions,
-  onAuthStateChanged,
-  // Fires on sign-in, sign-out *and* token refresh. Consumers that care about
-  // email verification must use this one: clicking the verification link does
-  // not change auth state, so onAuthStateChanged stays silent, but the forced
-  // getIdToken(true) in services/auth/emailGate.ts does fire this.
-  onIdTokenChanged,
-};
+export { app, auth, db, functionsInstance as functions, onAuthStateChanged };
