@@ -7,16 +7,12 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "environment": "development",
-      "env": {
-        "EXPO_PUBLIC_DEMO_MODE": "false"
-      }
+      "environment": "development"
     },
     "preview": {
       "distribution": "internal",
       "environment": "preview",
       "env": {
-        "EXPO_PUBLIC_DEMO_MODE": "false",
         "EXPO_PUBLIC_BILLING_BYPASS": "false",
         "EXPO_PUBLIC_FORCE_TELEMETRY_IN_DEV": "false"
       },
@@ -28,7 +24,6 @@
       "autoIncrement": true,
       "environment": "production",
       "env": {
-        "EXPO_PUBLIC_DEMO_MODE": "false",
         "EXPO_PUBLIC_BILLING_BYPASS": "false",
         "EXPO_PUBLIC_FORCE_TELEMETRY_IN_DEV": "false"
       }

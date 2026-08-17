@@ -10,7 +10,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import StartNewTripCard from "@/components/MyTrips/StartNewTripCard";
 import { auth, onAuthStateChanged } from "@/config/FirebaseConfig";
-import { isDemoMode } from "@/config/env";
 import UserTripList from "@/components/MyTrips/UserTripList";
 import { useRouter, useFocusEffect } from "expo-router";
 import { CreateTripContext } from "@/context/CreateTripContext";
@@ -59,7 +58,6 @@ const MyTrip = () => {
       await migrateLegacyData({
         email: user?.email ?? null,
         uid: user?.uid ?? null,
-        skipFirestore: isDemoMode(),
       });
 
       // One query for every trip the user has — demo, free-tier and premium all

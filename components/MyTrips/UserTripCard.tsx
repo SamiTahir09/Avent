@@ -3,7 +3,6 @@ import React from "react";
 import moment from "moment";
 import CustomButton from "../CustomButton";
 import { useRouter, useNavigation } from "expo-router";
-import { isDemoMode } from "@/config/env";
 
 const DEFAULT_TRIP_IMAGE =
   "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400";
@@ -36,7 +35,7 @@ const UserTripCard = ({ trip }: { trip: any }) => {
       setImageUri(locationInfo.imageUrl);
       return;
     }
-    if (isDemoMode() || !locationInfo?.photoRef) {
+    if (!locationInfo?.photoRef) {
       const fetchWiki = async () => {
         try {
           const placeName = trip?.tripPlan?.trip_plan?.location || locationInfo?.name || "";

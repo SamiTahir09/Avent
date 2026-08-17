@@ -28,9 +28,9 @@ const ENV_FILE = path.join(ROOT, ".env");
 
 /**
  * Keys the app reads at runtime and that must exist on the build server.
- * Flags (DEMO_MODE, BILLING_BYPASS, FORCE_TELEMETRY_IN_DEV) are deliberately
- * absent: those are pinned per-profile in eas.json so a stray local `true`
- * can never ship in a release build.
+ * Flags (BILLING_BYPASS, FORCE_TELEMETRY_IN_DEV) are deliberately absent:
+ * those are pinned per-profile in eas.json so a stray local `true` can never
+ * ship in a release build.
  */
 const SYNCED_KEYS = [
   "EXPO_PUBLIC_FIREBASE_API_KEY",
@@ -44,11 +44,14 @@ const SYNCED_KEYS = [
   "EXPO_PUBLIC_GOOGLE_MAP_KEY",
   "EXPO_PUBLIC_UNSPLASH_ACCESS_KEY",
   "EXPO_PUBLIC_WEATHERAPI_KEY",
+  // Google Drive backup (premium). Optional: a build without these still works,
+  // it just reports that backup isn't set up.
+  "EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID",
+  "EXPO_PUBLIC_GOOGLE_OAUTH_IOS_CLIENT_ID",
 ];
 
 /** Set in eas.json instead — listed so the script can explain the omission. */
 const PINNED_IN_EAS_JSON = [
-  "EXPO_PUBLIC_DEMO_MODE",
   "EXPO_PUBLIC_BILLING_BYPASS",
   "EXPO_PUBLIC_FORCE_TELEMETRY_IN_DEV",
 ];

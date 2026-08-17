@@ -1,29 +1,14 @@
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-} from "react-native";
+import { View, Text } from "react-native";
 import React, { useContext, useState } from "react";
 import { useRouter } from "expo-router";
 import { GooglePlacesAutocomplete } from "react-native-google-places-autocomplete";
 import { CreateTripContext } from "@/context/CreateTripContext";
-import { isDemoMode } from "@/config/env";
 import CustomButton from "@/components/CustomButton";
 import { parseCoordinates } from "@/utils/coordinates";
-
-const DEMO_PLACES = [
-  "Paris, France",
-  "Tokyo, Japan",
-  "Dubai, UAE",
-  "Lahore, Pakistan",
-  "London, UK",
-];
 
 const SearchPlace = () => {
   const router = useRouter();
   const { setTripData } = useContext(CreateTripContext);
-  const [demoPlace, setDemoPlace] = useState("");
   const [typedDestination, setTypedDestination] = useState("");
 
   const saveLocation = async (name: string) => {
@@ -76,44 +61,6 @@ const SearchPlace = () => {
     });
     router.push("/create-trip/select-traveler");
   };
-
-  if (isDemoMode()) {
-    return (
-      <View className="p-6 mt-16">
-        <Text className="text-4xl font-outfit-bold text-center mb-2">
-          Where do you want to go?
-        </Text>
-        <Text className="text-lg text-gray-400 font-outfit text-center mb-8">
-          Demo mode — pick or type a destination
-        </Text>
-
-        <TextInput
-          className="h-14 bg-neutral-200 rounded-full px-5 font-outfit-medium text-base mb-4"
-          placeholder="Type destination (e.g. Istanbul, Turkey)"
-          placeholderTextColor="#818181"
-          value={demoPlace}
-          onChangeText={setDemoPlace}
-          onSubmitEditing={() => demoPlace.trim() && saveLocation(demoPlace.trim())}
-        />
-
-        <CustomButton
-          title="Continue"
-          onPress={() => demoPlace.trim() && saveLocation(demoPlace.trim())}
-          className="mb-6"
-        />
-
-        {DEMO_PLACES.map((place) => (
-          <TouchableOpacity
-            key={place}
-            onPress={() => saveLocation(place)}
-            className="bg-purple-50 p-4 rounded-xl mb-3"
-          >
-            <Text className="font-outfit-medium text-purple-800">{place}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  }
 
   return (
     <View>

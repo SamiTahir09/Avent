@@ -7,7 +7,6 @@ import { AI_PROMPT } from "@/constants/Options";
 import { chatSession } from "@/config/GeminiConfig";
 import { useRouter } from "expo-router";
 import { auth } from "@/config/FirebaseConfig";
-import { isDemoMode } from "@/config/env";
 import { generateTripId, saveTrip } from "@/services/db/trips";
 import { AnalyticsEvent, analytics, crash } from "@/services/telemetry";
 import { consumeFreeTrip, refundFreeTrip } from "@/utils/purchaseVerification";
@@ -154,7 +153,6 @@ const GenerateTrip = () => {
       total_days: totalDays,
       budget: budget?.type ?? null,
       traveler_type: travelers?.type ?? null,
-      demo_mode: isDemoMode(),
     });
 
     let tripResponse: any;
@@ -198,30 +196,6 @@ const GenerateTrip = () => {
       
       let destLat = locationInfo?.coordinates?.lat || 28.6139;
       let destLng = locationInfo?.coordinates?.lng || 77.209;
-      
-      if (isDemoMode() && (!locationInfo?.coordinates || locationInfo.coordinates.lat === 28.6139)) {
-        const geoRes = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cityName)}&format=json&limit=1`,
-          { headers: { "User-Agent": "AventTravelApp/1.0" } }
-        );
-        if (geoRes.ok) {
-          const geoData = await geoRes.json();
-          if (geoData && geoData.length > 0) {
-            destLat = parseFloat(geoData[0].lat);
-            destLng = parseFloat(geoData[0].lon);
-            const locIdx = finalTripData.findIndex((item: any) => item.locationInfo);
-            if (locIdx !== -1) {
-              finalTripData[locIdx] = {
-                ...finalTripData[locIdx],
-                locationInfo: {
-                  ...finalTripData[locIdx].locationInfo,
-                  coordinates: { lat: destLat, lng: destLng }
-                }
-              };
-            }
-          }
-        }
-      }
 
       // Fetch main destination image from Unsplash
       const mainImageUrl = await fetchUnsplashImage(`${cityName} city travel destination`);
@@ -314,7 +288,6 @@ const GenerateTrip = () => {
       });
       void analytics.logEvent(AnalyticsEvent.TRIP_SAVED, {
         premium: isPremium,
-        demo_mode: isDemoMode(),
         total_days: totalDays,
       });
     } catch (saveErr) {

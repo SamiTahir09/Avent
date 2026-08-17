@@ -6,6 +6,7 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import CustomButton from "@/components/CustomButton";
 import { usePremiumStore } from "@/store/premiumStore";
+import { disconnectDrive } from "@/services/backup/googleAuth";
 import {
   AnalyticsEvent,
   analytics,
@@ -31,6 +32,17 @@ const Profile = () => {
   const handleLogout = async () => {
     try {
       void analytics.logEvent(AnalyticsEvent.LOGOUT);
+
+      // The Drive grant is stored per *device*, not per Avent account. Leaving it
+      // in place would let whoever signs in next on this phone restore the
+      // previous user's trips out of their Google Drive. Reconnecting is one tap;
+      // that leak is not worth saving it.
+      try {
+        await disconnectDrive();
+      } catch (err) {
+        console.warn("[profile] could not disconnect Drive on logout:", err);
+      }
+
       await auth.signOut();
       // Detach the uid so a subsequent anonymous session's events and crashes
       // aren't still attributed to the account that just signed out.
@@ -90,6 +102,42 @@ const Profile = () => {
             <Text className="ml-3 font-outfit">Email</Text>
           </View>
           <Text className="text-gray-500 font-outfit">{user?.email}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => router.push("/change-password")}
+          className="flex-row items-center justify-between bg-gray-50 p-4 rounded-xl mb-3"
+        >
+          <View className="flex-row items-center">
+            <Ionicons name="lock-closed-outline" size={24} color="#8b5cf6" />
+            <Text className="ml-3 font-outfit">Change Password</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#8b5cf6" />
+        </TouchableOpacity>
+
+        {/* Premium-only, but shown to everyone on purpose: a locked row that
+            explains what Premium adds converts better than a hidden feature, and
+            the screen itself is gated by PremiumGate. */}
+        <TouchableOpacity
+          onPress={() => router.push("/backup")}
+          className="flex-row items-center justify-between bg-gray-50 p-4 rounded-xl mb-3"
+        >
+          <View className="flex-row items-center">
+            <Ionicons name="cloud-upload-outline" size={24} color="#8b5cf6" />
+            <View className="ml-3">
+              <Text className="font-outfit">Backup & Restore</Text>
+              <Text className="text-gray-500 font-outfit text-xs">
+                {premium
+                  ? "Google Drive backup"
+                  : "Premium — keep trips safe off-device"}
+              </Text>
+            </View>
+          </View>
+          <Ionicons
+            name={premium ? "chevron-forward" : "lock-closed"}
+            size={20}
+            color="#8b5cf6"
+          />
         </TouchableOpacity>
 
         <TouchableOpacity className="flex-row items-center justify-between bg-gray-50 p-4 rounded-xl">

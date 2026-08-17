@@ -36,6 +36,14 @@ const OPTIONAL = {
   // Telemetry degrades to a local SQLite queue when this is absent.
   EXPO_PUBLIC_GA4_API_SECRET:
     "optional — without it analytics queues locally instead of posting to GA4",
+  // Drive backup hides itself when unconfigured rather than failing, so a build
+  // without these is a valid build — it just has no backup feature.
+  EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID:
+    "optional — without it Google Drive backup is unavailable on Android",
+  EXPO_PUBLIC_GOOGLE_OAUTH_IOS_CLIENT_ID:
+    "optional — without it Google Drive backup is unavailable on iOS",
+  EXPO_PUBLIC_APP_VERSION:
+    "optional — cosmetic version stamp on Drive backup files, defaults to 1.0.0",
 };
 
 /** Keys that are only ever read as a fallback for another key. */

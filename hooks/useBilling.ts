@@ -10,8 +10,6 @@ import {
   type Purchase,
 } from "expo-iap";
 import { auth, db, onAuthStateChanged } from "@/config/FirebaseConfig";
-import { isDemoMode } from "@/config/env";
-import { demoGetEntitlement, demoPurchase, demoRestore } from "@/config/demoMode";
 import { FREE_TRIP_LIMIT, getLocalFreeTripsUsed } from "@/services/LocalFreeTrial";
 import { usePremiumStore } from "@/store/premiumStore";
 import { SUBSCRIPTION_SKUS, findOfferToken, normalizeSubscriptions } from "@/services/billing/products";
@@ -477,10 +475,12 @@ function RealBillingProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Demo builds never touch expo-iap — it's a native module that can't load
+// Bypass builds never touch expo-iap — it's a native module that can't load
 // without a custom dev client, so even importing/calling useIAP() here would
-// crash in Expo Go. Everything is simulated locally via AsyncStorage instead.
-function DemoBillingProvider({ children }: { children: React.ReactNode }) {
+// crash in Expo Go. The grant is simulated locally via SQLite instead. This
+// provider is only ever mounted when EXPO_PUBLIC_BILLING_BYPASS is on (see
+// BillingProvider below), so every entitlement here is a local test-mode grant.
+function LocalBillingProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user: any) => {
       if (!user) {
@@ -491,22 +491,10 @@ function DemoBillingProvider({ children }: { children: React.ReactNode }) {
 
       const uid: string = user.uid;
       try {
-        // Prefer the SQLite grant when the bypass is on, so demo and real builds
-        // read premium from the same place and the Diagnostics reset button
-        // works identically in both.
-        const localGrant = isBillingBypassEnabled()
-          ? await getLocalPremium(uid)
-          : null;
-        if (localGrant?.premium) {
-          applyEntitlement(localGrant, uid);
-          return;
-        }
-
-        const entitlement = await demoGetEntitlement();
-        usePremiumStore.getState().setEntitlement(entitlement);
-        usePremiumStore.getState().setEntitlementLoaded(true);
+        const localGrant = await getLocalPremium(uid);
+        applyEntitlement(localGrant ?? freeTierEntitlement(), uid);
       } catch (err) {
-        console.error("Failed to hydrate demo entitlement:", err);
+        console.error("Failed to hydrate local entitlement:", err);
         usePremiumStore.getState().setEntitlementLoaded(true);
       }
     });
@@ -517,57 +505,50 @@ function DemoBillingProvider({ children }: { children: React.ReactNode }) {
   const purchase = async (productId: string) => {
     usePremiumStore.getState().setPurchaseState("purchasing");
     // Simulate the native sheet + verification round trip so the whole
-    // UI flow (loading -> success) is demoable without real billing.
+    // UI flow (loading -> success) matches the real purchase flow's timing.
     await new Promise((resolve) => setTimeout(resolve, 1200));
 
-    if (isBillingBypassEnabled() && auth.currentUser?.uid) {
-      const uid = auth.currentUser.uid;
-      try {
-        const entitlement = await grantLocalPremium(uid, productId, FREE_TRIP_LIMIT);
-        // Demo mode's free-trip gate reads its own AsyncStorage entitlement
-        // (config/demoMode.ts), not the store, so it has to be flipped too —
-        // otherwise a "premium" demo user still gets refused after 2 trips.
-        await demoPurchase(productId);
-        applyEntitlement(entitlement, uid);
-        usePremiumStore.getState().setPurchaseState("success");
-        void analytics.logEvent(AnalyticsEvent.PURCHASE, {
-          product_id: productId,
-          test_mode: true,
-        });
-      } catch (err: any) {
-        usePremiumStore
-          .getState()
-          .setPurchaseState("error", err?.message || "Couldn't grant test premium.");
-      }
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      usePremiumStore
+        .getState()
+        .setPurchaseState("error", "Sign in first to test a purchase.");
       return;
     }
-
-    const entitlement = await demoPurchase(productId);
-    usePremiumStore.getState().setEntitlement(entitlement);
-    usePremiumStore.getState().setPurchaseState("success");
+    try {
+      const entitlement = await grantLocalPremium(uid, productId, FREE_TRIP_LIMIT);
+      applyEntitlement(entitlement, uid);
+      usePremiumStore.getState().setPurchaseState("success");
+      void analytics.logEvent(AnalyticsEvent.PURCHASE, {
+        product_id: productId,
+        test_mode: true,
+      });
+    } catch (err: any) {
+      usePremiumStore
+        .getState()
+        .setPurchaseState("error", err?.message || "Couldn't grant test premium.");
+    }
   };
 
   const restore = async (): Promise<{ restored: boolean }> => {
     usePremiumStore.getState().setPurchaseState("verifying");
 
-    if (isBillingBypassEnabled() && auth.currentUser?.uid) {
-      const uid = auth.currentUser.uid;
-      try {
-        const granted = await getLocalPremium(uid);
-        if (granted?.premium) {
-          applyEntitlement(granted, uid);
-          usePremiumStore.getState().setPurchaseState("success");
-          return { restored: true };
-        }
-      } catch {
-        // Fall through to the demo entitlement below.
+    try {
+      const uid = auth.currentUser?.uid;
+      const granted = uid ? await getLocalPremium(uid) : null;
+      if (granted?.premium && uid) {
+        applyEntitlement(granted, uid);
+        usePremiumStore.getState().setPurchaseState("success");
+        return { restored: true };
       }
+      usePremiumStore.getState().setPurchaseState("idle");
+      return { restored: false };
+    } catch (err: any) {
+      usePremiumStore
+        .getState()
+        .setPurchaseState("error", err?.message || "Couldn't read the test grant.");
+      return { restored: false };
     }
-
-    const entitlement = await demoRestore();
-    usePremiumStore.getState().setEntitlement(entitlement);
-    usePremiumStore.getState().setPurchaseState(entitlement.premium ? "success" : "idle");
-    return { restored: entitlement.premium };
   };
 
   return React.createElement(
@@ -578,8 +559,6 @@ function DemoBillingProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function BillingProvider({ children }: { children: React.ReactNode }) {
-  // The bypass is routed to the local provider as well, not just demo mode.
-  //
   // With EXPO_PUBLIC_BILLING_BYPASS=true, `purchase()` never reaches Google Play
   // in either provider — it grants premium from SQLite. But RealBillingProvider
   // still calls `useIAP()`, which opens a Play Billing connection through
@@ -592,10 +571,10 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   // local provider makes the test flow behave identically in Expo Go and in a
   // dev/EAS build. Turn the flag off and the real expo-iap path is restored
   // untouched.
-  const useLocalBilling = isDemoMode() || isBillingBypassEnabled();
+  const useLocalBilling = isBillingBypassEnabled();
 
   return useLocalBilling
-    ? React.createElement(DemoBillingProvider, null, children)
+    ? React.createElement(LocalBillingProvider, null, children)
     : React.createElement(RealBillingProvider, null, children);
 }
 
