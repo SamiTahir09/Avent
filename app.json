@@ -7,7 +7,8 @@
     "icon": "./assets/images/icon.png",
     "scheme": [
       "myapp",
-      "com.googleusercontent.apps.385181211292-eve1dmuc55ja2igmdkjcqvsb8nf28hq8"
+      "com.Tripplanner.company",
+      "com.tripplanner.company"
     ],
     "userInterfaceStyle": "automatic",
     "splash": {

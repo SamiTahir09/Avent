@@ -1,4 +1,5 @@
 import * as AuthSession from "expo-auth-session";
+import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
@@ -133,10 +134,9 @@ export function isDriveConfigured(): boolean {
 /**
  * `123-abc.apps.googleusercontent.com` → `com.googleusercontent.apps.123-abc`
  *
- * Installed-app OAuth clients don't register redirect URLs with Google; they
- * receive the code on a custom scheme that must equal the reversed client id.
- * The same string has to be listed in app.json's `scheme` array, or Android/iOS
- * will have nothing registered to hand the callback back to.
+ * This is the *iOS* convention. An iOS OAuth client calls back on a custom
+ * scheme equal to the reversed client id; Android does not work this way at
+ * all — see getRedirectUri.
  */
 function reversedClientIdScheme(clientId: string): string {
   const base = clientId.replace(/\.apps\.googleusercontent\.com$/, "");
@@ -144,16 +144,36 @@ function reversedClientIdScheme(clientId: string): string {
 }
 
 /**
- * Built by hand rather than via `AuthSession.makeRedirectUri()`.
+ * The redirect scheme is per-platform, and the wrong one is rejected before the
+ * consent screen is ever drawn — Google answers with its own "Access blocked"
+ * page, which is not an error this code ever gets to see or explain.
  *
- * makeRedirectUri exists mostly to paper over Expo Go and web, neither of which
- * can receive a reversed-client-id callback anyway — Drive backup requires a dev
- * or EAS build. For a native build the correct value is exactly this string, and
- * constructing it directly means it can't silently change shape underneath us
- * when expo-auth-session changes that helper's defaults.
+ * An Android OAuth client has no redirect URL field to register: Google
+ * identifies the app by package name + signing SHA-1, and only calls back on a
+ * custom scheme equal to that package name. Handing it a reversed client id is
+ * the iOS pattern, and is rejected with redirect_uri_mismatch.
+ *
+ * Whatever this returns must also be listed in app.json's `scheme` array, or the
+ * OS has nothing registered to route the callback to and the browser tab just
+ * sits there after consent.
+ *
+ * Built by hand rather than via `AuthSession.makeRedirectUri()`, whose defaults
+ * mostly exist to paper over Expo Go and web — neither of which can receive a
+ * native callback anyway, so Drive backup needs a dev or EAS build regardless.
  */
 function getRedirectUri(clientId: string): string {
-  return `${reversedClientIdScheme(clientId)}:/oauth2redirect`;
+  if (Platform.OS === "ios") {
+    return `${reversedClientIdScheme(clientId)}:/oauth2redirect`;
+  }
+
+  const packageName = Constants.expoConfig?.android?.package;
+  if (!packageName) {
+    throw new DriveAuthError(
+      "not_configured",
+      "Couldn't read the Android package name from the app config, so the Google redirect URI can't be built."
+    );
+  }
+  return `${packageName}:/oauth2redirect`;
 }
 
 // ─── Access token cache ────────────────────────────────────────────────────

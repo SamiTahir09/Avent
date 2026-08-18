@@ -141,30 +141,54 @@ npm run eas:env:push
 npm run check:build-env
 ```
 
-### 3e. ⚠️ Register the redirect scheme in `app.json`
+### 3e. ⚠️ Turn on "Custom URI scheme" for the Android client
 
-**This is the step that silently breaks the feature if you skip it.** Google
-hands the authorization code back on a custom URI scheme equal to the *reversed*
-client ID. Android and iOS only listen for schemes declared at build time.
+**This is the one that produces `Access blocked`.** In October 2023 Google
+disabled custom URI schemes for Android OAuth clients *by default*, because a
+malicious app can register the same scheme and intercept the callback. The whole
+flow in `googleAuth.ts` is a custom-scheme flow, so with the switch off Google
+refuses the request before the consent screen is ever drawn and the user sees an
+"Access blocked" page instead.
 
-`app.json` currently contains a placeholder:
+**APIs & Services → Credentials →** your Android client **→ Advanced Settings
+→ Enable Custom URI scheme → Save.**
+
+Changes here can take a few minutes to propagate. Nothing in the app needs to
+be rebuilt for this one — it is purely server-side.
+
+### 3f. ⚠️ Register the redirect scheme in `app.json`
+
+Android and iOS only listen for URI schemes declared at build time, and the two
+platforms use *different* schemes:
+
+| Platform | Scheme Google calls back on |
+| --- | --- |
+| Android | the app package name — `com.Tripplanner.company` |
+| iOS | the reversed client ID — `com.googleusercontent.apps.<id>` |
+
+An Android OAuth client has no redirect URL field to fill in: Google identifies
+the app by package name + signing SHA-1, and will only redirect to the package
+name scheme. Handing it a reversed client ID — which is what this repo did until
+the flow was fixed — is rejected with `redirect_uri_mismatch`, which Google also
+renders as "Access blocked". `getRedirectUri()` now branches on `Platform.OS`.
+
+So `app.json` carries the package name, not the reversed client ID:
 
 ```json
 "scheme": [
   "myapp",
-  "com.googleusercontent.apps.REPLACE-WITH-YOUR-ANDROID-CLIENT-ID"
+  "com.Tripplanner.company",
+  "com.tripplanner.company"
 ],
 ```
 
-Replace it with the reverse of your Android client ID — drop
-`.apps.googleusercontent.com` and prefix `com.googleusercontent.apps.`:
+The lowercase duplicate is deliberate. Android intent-filter scheme matching is
+case-sensitive, and Chromium canonicalises URL schemes to lowercase before
+dispatching the intent — so a package name with a capital letter in it can come
+back lowercased and match nothing. Registering both costs nothing and removes a
+failure that looks like "the browser just sits there after I tap Allow".
 
-```
-client ID:  123456789-abcdefg.apps.googleusercontent.com
-scheme:     com.googleusercontent.apps.123456789-abcdefg
-```
-
-If you also ship iOS, add the iOS client's reversed ID as a third entry.
+If you also ship iOS, add that client’s reversed ID as a further entry.
 
 Then rebuild — a scheme change is a native change, so Expo Go and an old dev
 client won't pick it up:
