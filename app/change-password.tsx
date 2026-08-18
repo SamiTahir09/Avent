@@ -6,13 +6,23 @@ import { Ionicons } from "@expo/vector-icons";
 
 import CustomButton from "@/components/CustomButton";
 import { auth } from "@/config/FirebaseConfig";
-import { authErrorMessage, sendResetEmail } from "@/services/auth/emailAuth";
-import { AnalyticsEvent, analytics, crash } from "@/services/telemetry";
+import {
+  authErrorMessage,
+  sendResetEmail,
+  signOutUser,
+} from "@/services/auth/emailAuth";
+import {
+  AnalyticsEvent,
+  analytics,
+  crash,
+  identifyUser,
+} from "@/services/telemetry";
 
 const ChangePassword = () => {
   const user = auth.currentUser;
   const [isLoading, setIsLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [sentEmail, setSentEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,11 +44,20 @@ const ChangePassword = () => {
     try {
       setIsLoading(true);
       setError(null);
-      await sendResetEmail(user.email);
-      setSent(true);
+      const email = user.email;
+      await sendResetEmail(email);
       void analytics.logEvent(AnalyticsEvent.PASSWORD_RESET_SENT, {
         trigger: "change_password",
       });
+      setSentEmail(email);
+      setSent(true);
+
+      // The old session still works with the old password until the reset link
+      // is used. Signing out here forces a fresh sign-in with the new password
+      // instead of leaving a session open that no longer matches the emailed
+      // credential.
+      await signOutUser();
+      await identifyUser({ uid: null });
     } catch (err: any) {
       setError(authErrorMessage(err));
       await crash.recordError(err, { screen: "change-password" });
@@ -50,7 +69,12 @@ const ChangePassword = () => {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="flex-row items-center px-5 pt-2 pb-1">
-        <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
+        <TouchableOpacity
+          onPress={() =>
+            sent ? router.replace("/(auth)/sign-in") : router.back()
+          }
+          className="p-2 -ml-2"
+        >
           <Ionicons name="chevron-back" size={26} color="#111827" />
         </TouchableOpacity>
         <Text className="text-2xl font-outfit-bold ml-1">Change Password</Text>
@@ -72,16 +96,16 @@ const ChangePassword = () => {
               We've sent a password reset link to
             </Text>
             <Text className="text-lg font-outfit-bold text-center mt-1 mb-4">
-              {user?.email}
+              {sentEmail}
             </Text>
             <Text className="text-sm font-outfit text-gray-500 text-center leading-5">
-              Open the link, choose a new password, then come back and sign in
-              with it.
+              You've been signed out. Open the link, choose a new password,
+              then sign in with it below.
             </Text>
 
             <CustomButton
-              title="Back to Profile"
-              onPress={() => router.back()}
+              title="Back to Sign In"
+              onPress={() => router.replace("/(auth)/sign-in")}
               className="mt-8"
             />
           </>

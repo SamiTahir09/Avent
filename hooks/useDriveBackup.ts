@@ -15,7 +15,6 @@ import {
   isDriveConfigured,
 } from "@/services/backup/googleAuth";
 import { AnalyticsEvent, analytics } from "@/services/telemetry";
-import { usePremiumStore } from "@/store/premiumStore";
 
 /**
  * View state for the Backup & Restore screen.
@@ -36,7 +35,6 @@ export type BackupBusyState =
 
 export interface UseDriveBackup {
   configured: boolean;
-  premium: boolean;
   status: BackupStatus | null;
   accountEmail: string | null;
   busy: BackupBusyState;
@@ -53,8 +51,6 @@ export interface UseDriveBackup {
 }
 
 export function useDriveBackup(): UseDriveBackup {
-  const premium = usePremiumStore((s) => s.premium);
-
   const [status, setStatus] = useState<BackupStatus | null>(null);
   const [accountEmail, setAccountEmail] = useState<string | null>(null);
   const [busy, setBusy] = useState<BackupBusyState>("loading");
@@ -82,13 +78,6 @@ export function useDriveBackup(): UseDriveBackup {
   useEffect(() => {
     void refresh();
   }, [refresh]);
-
-  // Re-reads after an upgrade: the Drive status of a user who just bought
-  // Premium on the paywall changes from "locked" to "connect", and without this
-  // the screen behind the modal would keep saying locked until it remounted.
-  useEffect(() => {
-    if (premium) void refresh();
-  }, [premium, refresh]);
 
   const clearMessages = useCallback(() => {
     setError(null);
@@ -202,7 +191,6 @@ export function useDriveBackup(): UseDriveBackup {
 
   return {
     configured,
-    premium,
     status,
     accountEmail,
     busy,

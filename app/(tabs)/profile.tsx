@@ -115,9 +115,6 @@ const Profile = () => {
           <Ionicons name="chevron-forward" size={20} color="#8b5cf6" />
         </TouchableOpacity>
 
-        {/* Premium-only, but shown to everyone on purpose: a locked row that
-            explains what Premium adds converts better than a hidden feature, and
-            the screen itself is gated by PremiumGate. */}
         <TouchableOpacity
           onPress={() => router.push("/backup")}
           className="flex-row items-center justify-between bg-gray-50 p-4 rounded-xl mb-3"
@@ -127,17 +124,11 @@ const Profile = () => {
             <View className="ml-3">
               <Text className="font-outfit">Backup & Restore</Text>
               <Text className="text-gray-500 font-outfit text-xs">
-                {premium
-                  ? "Google Drive backup"
-                  : "Premium — keep trips safe off-device"}
+                Google Drive backup
               </Text>
             </View>
           </View>
-          <Ionicons
-            name={premium ? "chevron-forward" : "lock-closed"}
-            size={20}
-            color="#8b5cf6"
-          />
+          <Ionicons name="chevron-forward" size={20} color="#8b5cf6" />
         </TouchableOpacity>
 
         <TouchableOpacity className="flex-row items-center justify-between bg-gray-50 p-4 rounded-xl">

@@ -14,7 +14,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { formatDistanceToNow } from "date-fns";
 
 import CustomButton from "@/components/CustomButton";
-import PremiumGate from "@/components/PremiumGate";
 import { useDriveBackup } from "@/hooks/useDriveBackup";
 import { analytics } from "@/services/telemetry";
 import { auth } from "@/config/FirebaseConfig";
@@ -346,12 +345,7 @@ const BackupScreen = () => {
         <Text className="text-2xl font-outfit-bold ml-1">Backup & Restore</Text>
       </View>
 
-      {/* The service layer re-checks premium on every call, so this wrapper is
-          purely the visible half of the gate — a free user sees what they'd get
-          and the paywall, and cannot reach the buttons underneath. */}
-      <PremiumGate feature="drive_backup">
-        <BackupContent />
-      </PremiumGate>
+      <BackupContent />
     </SafeAreaView>
   );
 };

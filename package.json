@@ -38,6 +38,8 @@
     "expo-auth-session": "~7.0.11",
     "expo-build-properties": "~1.0.10",
     "expo-constants": "~18.0.13",
+    "expo-crypto": "~15.0.9",
+    "expo-file-system": "~19.0.24",
     "expo-font": "~14.0.12",
     "expo-iap": "^4.3.6",
     "expo-linear-gradient": "~15.0.8",

@@ -51,5 +51,4 @@ declare type PremiumFeatureKey =
   | "weather_forecast"
   | "smart_outfit"
   | "smart_packing"
-  | "budget_planner"
-  | "drive_backup";
+  | "budget_planner";

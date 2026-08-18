@@ -63,9 +63,9 @@ export default function RootLayout() {
     return unsubscribe;
   }, []);
 
-  // Daily Drive backup for premium accounts. maybeAutoBackup() decides whether
-  // to do anything (premium, connected, >24h since the last one, unmetered
-  // network) and never throws, so it is safe to fire from a lifecycle callback.
+  // Daily Drive backup. maybeAutoBackup() decides whether to do anything
+  // (connected, >24h since the last one, unmetered network) and never throws,
+  // so it is safe to fire from a lifecycle callback.
   //
   // Backgrounding is the best moment to trigger it: the user has stopped editing,
   // so the snapshot is complete, and the upload doesn't compete with the UI. The

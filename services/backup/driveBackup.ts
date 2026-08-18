@@ -13,7 +13,6 @@ import {
   setMeta,
 } from "@/services/db";
 import { isOnline } from "@/services/OfflineSync";
-import { usePremiumStore } from "@/store/premiumStore";
 import { AnalyticsEvent, analytics, crash } from "@/services/telemetry";
 
 import {
@@ -27,7 +26,7 @@ import {
 import { getAccessToken, isDriveConnected } from "./googleAuth";
 
 /**
- * Google Drive backup orchestration — PREMIUM ONLY.
+ * Google Drive backup orchestration.
  *
  * What gets backed up is the whole SQLite file, which is the app's entire local
  * state: trips, the kv cache, per-user counters, the analytics queue. Backing up
@@ -55,7 +54,6 @@ const META_AUTO_BACKUP_ENABLED = "drive_auto_backup_enabled";
 export const AUTO_BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export type BackupErrorCode =
-  | "not_premium"
   | "not_connected"
   | "offline"
   | "no_backup"
@@ -72,7 +70,6 @@ export class BackupError extends Error {
 }
 
 export interface BackupStatus {
-  premium: boolean;
   connected: boolean;
   lastBackupAt: number | null;
   lastBackupSize: number | null;
@@ -82,24 +79,6 @@ export interface BackupStatus {
 }
 
 // ─── Guards ────────────────────────────────────────────────────────────────
-
-/**
- * The single premium check for this feature.
- *
- * Enforced in the service layer, not just in the UI: PremiumGate only hides a
- * screen, and every one of these functions is also reachable from the auto-backup
- * timer and from a restore prompt. Checking here means there is no path that
- * backs a free account's data up to Drive.
- */
-function requirePremium(): void {
-  const { premium } = usePremiumStore.getState();
-  if (!premium) {
-    throw new BackupError(
-      "not_premium",
-      "Google Drive backup is a Premium feature."
-    );
-  }
-}
 
 async function requireOnline(): Promise<void> {
   if (!(await isOnline())) {
@@ -178,7 +157,6 @@ export async function setAutoBackupEnabled(enabled: boolean): Promise<void> {
 }
 
 export async function getBackupStatus(): Promise<BackupStatus> {
-  const { premium } = usePremiumStore.getState();
   const connected = await isDriveConnected();
 
   const [lastAt, lastSize, lastRestore, autoBackupEnabled] = await Promise.all([
@@ -189,9 +167,9 @@ export async function getBackupStatus(): Promise<BackupStatus> {
   ]);
 
   let remote: DriveFileInfo | null = null;
-  // Only asks Drive when there's a credential and a reason to. A free or
-  // disconnected user opening the screen should cost zero network calls.
-  if (premium && connected) {
+  // Only asks Drive when there's a credential and a reason to. A disconnected
+  // user opening the screen should cost zero network calls.
+  if (connected) {
     try {
       remote = await findBackupFile(await getAccessToken());
     } catch (err) {
@@ -203,7 +181,6 @@ export async function getBackupStatus(): Promise<BackupStatus> {
   }
 
   return {
-    premium,
     connected,
     lastBackupAt: lastAt ? Number(lastAt) : null,
     lastBackupSize: lastSize ? Number(lastSize) : null,
@@ -223,7 +200,6 @@ export async function getBackupStatus(): Promise<BackupStatus> {
 export async function backupNow(
   trigger: "manual" | "auto" = "manual"
 ): Promise<{ size: number; at: number }> {
-  requirePremium();
   await requireOnline();
 
   void analytics.logEvent(AnalyticsEvent.BACKUP_START, { trigger });
@@ -265,10 +241,10 @@ export async function backupNow(
       trigger,
       code: err?.code ?? "unknown",
     });
-    // A user cancelling the Google consent sheet, being offline, or not being
-    // premium are all expected outcomes — reporting them as crashes would bury
-    // the genuine upload failures.
-    if (!["not_premium", "offline", "not_connected", "cancelled"].includes(err?.code)) {
+    // A user cancelling the Google consent sheet or being offline are both
+    // expected outcomes — reporting them as crashes would bury the genuine
+    // upload failures.
+    if (!["offline", "not_connected", "cancelled"].includes(err?.code)) {
       await crash.recordError(err, { feature: "drive_backup", trigger });
     }
     throw err;
@@ -287,7 +263,6 @@ export async function backupNow(
  * function that loses everything when the download turns out to be truncated.
  */
 export async function restoreFromDrive(): Promise<{ trips: number; at: number }> {
-  requirePremium();
   await requireOnline();
 
   void analytics.logEvent(AnalyticsEvent.RESTORE_START);
@@ -353,7 +328,7 @@ export async function restoreFromDrive(): Promise<{ trips: number; at: number }>
     void analytics.logEvent(AnalyticsEvent.RESTORE_FAILED, {
       code: err?.code ?? "unknown",
     });
-    if (!["not_premium", "offline", "not_connected", "no_backup", "cancelled"].includes(err?.code)) {
+    if (!["offline", "not_connected", "no_backup", "cancelled"].includes(err?.code)) {
       await crash.recordError(err, { feature: "drive_restore" });
     }
     // Leave nothing half-downloaded behind for the next attempt to trip over.
@@ -430,7 +405,6 @@ async function validateDatabaseFile(
 
 /** Removes the Drive copy. Local data is untouched. */
 export async function deleteRemoteBackup(): Promise<void> {
-  requirePremium();
   const accessToken = await getAccessToken();
   const remote = await findBackupFile(accessToken);
   if (!remote) return;

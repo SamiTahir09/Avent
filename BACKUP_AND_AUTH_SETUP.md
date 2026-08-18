@@ -2,7 +2,7 @@
 
 Three features, one document, because they share one decision: **Firebase holds
 accounts, SQLite holds data, and Google Drive holds a copy of that SQLite file
-for Premium users only.** Nothing was moved to Firestore to make this work.
+for every signed-in user.** Nothing was moved to Firestore to make this work.
 
 | Thing | Where it lives | Free tier | Premium |
 | --- | --- | --- | --- |
@@ -10,7 +10,7 @@ for Premium users only.** Nothing was moved to Firestore to make this work.
 | Password reset | Firebase Auth | ✅ | ✅ |
 | Trips, caches, counters, analytics queue | SQLite (`avent.db`) | ✅ | ✅ |
 | Entitlement (`premium`, purchase token) | Firestore `Users/{uid}` | ✅ | ✅ |
-| Backup of `avent.db` | User's own Google Drive | ❌ | ✅ |
+| Backup of `avent.db` | User's own Google Drive | ✅ | ✅ |
 
 Firebase Auth's free Spark plan covers verification and reset emails — no Blaze
 upgrade, no Cloud Function, no email provider.
@@ -211,17 +211,10 @@ swap is reversible; a truncated download can't destroy local data.
 ### Automatic backup
 
 `maybeAutoBackup()` runs on launch and whenever the app is backgrounded. It does
-nothing unless *all* of: entitlement loaded, premium, Drive connected, more than
-24 h since the last backup, online, and the connection is not metered. It never
-throws. The manual "Back up now" button skips the metered check — an explicit tap
-is consent to spend mobile data.
-
-### Where premium is enforced
-
-`requirePremium()` in `services/backup/driveBackup.ts`, on every public function.
-`PremiumGate` on the screen is only the visible half; the service check is what
-makes it impossible for a free account's data to reach Drive via the auto-backup
-timer or any other path.
+nothing unless *all* of: Drive connected, more than 24 h since the last backup,
+online, and the connection is not metered. It never throws. The manual "Back up
+now" button skips the metered check — an explicit tap is consent to spend mobile
+data.
 
 ### Sign-out disconnects Drive
 
@@ -250,8 +243,7 @@ next person to sign in on that phone restore the previous user's trips.
 
 **Backup**
 
-- [ ] Free account: Profile → Backup & Restore shows the lock and paywall
-- [ ] Premium: Connect Google Drive → consent screen → returns to the app
+- [ ] Connect Google Drive → consent screen → returns to the app
 - [ ] "Back up now" reports a size; a second run replaces rather than duplicates
       (check `drive.google.com` → Settings → Manage apps → Avent shows one
       hidden app data file)

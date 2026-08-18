@@ -1,7 +1,6 @@
 import NetInfo from "@react-native-community/netinfo";
 
 import { getMeta } from "@/services/db";
-import { usePremiumStore } from "@/store/premiumStore";
 
 import { AUTO_BACKUP_INTERVAL_MS, backupNow, isAutoBackupEnabled } from "./driveBackup";
 import { isDriveConnected } from "./googleAuth";
@@ -21,7 +20,6 @@ import { isDriveConnected } from "./googleAuth";
 
 export type AutoBackupOutcome =
   | "backed_up"
-  | "not_premium"
   | "not_connected"
   | "disabled"
   | "too_soon"
@@ -42,13 +40,6 @@ export async function maybeAutoBackup(
   if (running) return "already_running";
 
   try {
-    const { premium, entitlementLoaded } = usePremiumStore.getState();
-
-    // `entitlementLoaded` matters as much as `premium`: at launch the store
-    // still holds its default `premium: false`, so acting on it early would
-    // decide every premium user is free and never back anything up.
-    if (!entitlementLoaded || !premium) return "not_premium";
-
     if (!(await isDriveConnected())) return "not_connected";
     if (!(await isAutoBackupEnabled())) return "disabled";
 
