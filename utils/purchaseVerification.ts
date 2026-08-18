@@ -1,7 +1,5 @@
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/config/FirebaseConfig";
-import { isDemoMode } from "@/config/env";
-import { demoConsumeFreeTrip, demoPurchase } from "@/config/demoMode";
 import {
   consumeLocalFreeTrip,
   refundLocalFreeTrip,
@@ -56,15 +54,9 @@ export interface VerifyPurchaseResult {
  * even before functions/src/consumeFreeTrip.ts is deployed.
  */
 export async function consumeFreeTrip(): Promise<ConsumeFreeTripResult> {
-  // The premium check comes FIRST, before the demo branch. Demo mode's own gate
-  // reads a separate AsyncStorage entitlement, so checking it first meant a
-  // premium user (including a test-mode grant) was still refused after two
-  // trips and bounced to the paywall.
   if (usePremiumStore.getState().premium) {
     return { allowed: true, reason: "premium" };
   }
-
-  if (isDemoMode()) return demoConsumeFreeTrip();
 
   const uid = auth.currentUser?.uid;
   if (!uid) {
@@ -80,11 +72,10 @@ export async function consumeFreeTrip(): Promise<ConsumeFreeTripResult> {
  * Undoes a `consumeFreeTrip` when the generation it paid for never completed.
  * The credit has to be taken before the Gemini call — otherwise a deep link
  * straight into the generate screen bypasses the gate — so the failure paths
- * are responsible for giving it back. No-op for premium and demo users, who
- * never had a credit deducted.
+ * are responsible for giving it back. No-op for premium users, who never had
+ * a credit deducted.
  */
 export async function refundFreeTrip(): Promise<void> {
-  if (isDemoMode()) return;
   if (usePremiumStore.getState().premium) return;
 
   const uid = auth.currentUser?.uid;
@@ -101,21 +92,11 @@ export async function refundFreeTrip(): Promise<void> {
 /**
  * Sends a purchase token to the verifyPurchase Cloud Function, which checks
  * it against the Google Play Developer API and only then flips `premium` on
- * in Firestore — see functions/src/verifyPurchase.ts. In demo mode there is
- * no real Play token, so the "purchase" is trusted locally instead.
+ * in Firestore — see functions/src/verifyPurchase.ts.
  */
 export async function verifyPurchase(
   input: VerifyPurchaseInput
 ): Promise<VerifyPurchaseResult> {
-  if (isDemoMode()) {
-    const entitlement = await demoPurchase(input.productId);
-    return {
-      verified: true,
-      expiryDate: entitlement.expiryDate,
-      subscriptionStatus: entitlement.subscriptionStatus,
-    };
-  }
-
   const callable = httpsCallable<
     VerifyPurchaseInput & { packageName: string },
     VerifyPurchaseResult

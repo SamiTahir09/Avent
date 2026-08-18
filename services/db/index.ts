@@ -1,3 +1,4 @@
+import * as FileSystem from "expo-file-system/legacy";
 import * as SQLite from "expo-sqlite";
 
 import { DATABASE_NAME, MIGRATIONS, SCHEMA_VERSION } from "./schema";
@@ -81,6 +82,67 @@ export async function closeDb(): Promise<void> {
   const db = await dbPromise;
   dbPromise = null;
   await db.closeAsync();
+}
+
+/**
+ * Absolute path of the live database file.
+ *
+ * expo-sqlite always opens databases from `<documentDirectory>/SQLite/<name>`,
+ * and the Drive backup code needs the real path to read bytes off disk and to
+ * swap the file during a restore. Exported from here so that layout is asserted
+ * in exactly one place instead of being re-derived by every caller.
+ */
+export function getDatabaseDirectory(): string {
+  return `${FileSystem.documentDirectory}SQLite`;
+}
+
+export function getDatabaseFilePath(name: string = DATABASE_NAME): string {
+  return `${getDatabaseDirectory()}/${name}`;
+}
+
+/**
+ * Turns an expo-file-system `file:///…` URI into a plain filesystem path.
+ *
+ * SQLite is not a URI consumer: `VACUUM INTO 'file:///data/…'` tries to create a
+ * directory literally named `file:` and fails with "unable to open database
+ * file". expo-file-system, meanwhile, only accepts the URI form. Every value
+ * crossing from one to the other has to go through here.
+ */
+export function fileUriToPath(uri: string): string {
+  if (!uri.startsWith("file://")) return uri;
+  // Percent-decoded because the document directory can contain spaces on iOS
+  // (it lives under the app's container, whose name includes the app label).
+  return decodeURIComponent(uri.replace(/^file:\/\//, ""));
+}
+
+/**
+ * Writes a consistent, self-contained copy of the database to `destPath`.
+ *
+ * `VACUUM INTO` rather than a plain file copy: the live database runs in WAL
+ * mode, so `avent.db` on its own is missing every committed page still sitting
+ * in `avent.db-wal`. Copying just the one file yields a backup that silently
+ * lacks the most recent trips — the exact data the user is backing up for.
+ * VACUUM INTO also compacts free pages, which keeps the upload small.
+ *
+ * SQLite refuses to overwrite an existing target, so the caller must ensure
+ * `destPath` is free (createSnapshot in services/backup/driveBackup.ts does).
+ */
+export async function exportSnapshot(destPath: string): Promise<void> {
+  const db = await getDb();
+
+  // Best-effort: folds the WAL back into the main file first. VACUUM INTO is
+  // correct without it, but this keeps the -wal from growing unboundedly on
+  // devices that back up often and never restart the app.
+  try {
+    await db.execAsync("PRAGMA wal_checkpoint(TRUNCATE);");
+  } catch (err) {
+    console.warn("[db] wal_checkpoint before snapshot failed:", err);
+  }
+
+  // Single quotes are the SQL string delimiter here, so a path containing one
+  // would end the literal early. Doubling is the SQL escape.
+  const sqlitePath = fileUriToPath(destPath).replace(/'/g, "''");
+  await db.execAsync(`VACUUM INTO '${sqlitePath}';`);
 }
 
 export async function getMeta(key: string): Promise<string | null> {

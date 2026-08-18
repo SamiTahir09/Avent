@@ -1,6 +1,5 @@
 import { kvDelete, kvGet, kvSet } from "@/services/db/kv";
 import { setLocalFreeTripsUsed } from "@/services/db/trips";
-import { isDemoMode } from "@/config/env";
 
 /**
  * Test-mode entitlement store.
@@ -120,13 +119,6 @@ export async function resetToFreeTier(uid: string): Promise<void> {
   // premium in Firestore, this just forces a re-fetch — which is correct.)
   await kvDelete(ENTITLEMENT_CACHE_KEY(uid));
   await setLocalFreeTripsUsed(uid, 0);
-
-  // Demo mode keeps its own entitlement + free-trip counter in AsyncStorage, so
-  // a demo build would still report premium if only the SQLite side were cleared.
-  if (isDemoMode()) {
-    const { demoResetEntitlement } = require("@/config/demoMode");
-    await demoResetEntitlement();
-  }
 }
 
 let warned = false;

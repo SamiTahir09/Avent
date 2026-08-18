@@ -179,10 +179,10 @@ collection.
    `/premium`.
 
 If you don't want to wait for real Play propagation while iterating on UI,
-leave `PLAY_VERIFICATION_STUB=true` and use demo mode
-(`EXPO_PUBLIC_DEMO_MODE=true` in `.env`, or the `preview` EAS build profile) —
-`config/demoMode.ts` simulates the entire free-trial + purchase + restore
-flow locally via AsyncStorage, no Play Console or Cloud Functions required.
+leave `PLAY_VERIFICATION_STUB=true` and set `EXPO_PUBLIC_BILLING_BYPASS=true`
+in `.env` (or the `preview` EAS build profile) — `hooks/useBilling.ts`'s local
+provider simulates the entire free-trial + purchase + restore flow via SQLite,
+no Play Console or Cloud Functions required.
 
 ---
 

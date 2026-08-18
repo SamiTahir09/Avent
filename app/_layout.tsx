@@ -8,7 +8,7 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useState } from "react";
 import "react-native-reanimated";
-import { useColorScheme } from "react-native";
+import { AppState, useColorScheme } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import "../global.css";
@@ -18,6 +18,7 @@ import { CreateTripContext } from "@/context/CreateTripContext";
 import { startOfflineSyncListener } from "@/services/OfflineSync";
 import { initTelemetry } from "@/services/telemetry";
 import { assertBypassSafety } from "@/services/billing/localEntitlement";
+import { maybeAutoBackup } from "@/services/backup/autoBackup";
 import { BillingProvider } from "@/hooks/useBilling";
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -62,6 +63,25 @@ export default function RootLayout() {
     return unsubscribe;
   }, []);
 
+  // Daily Drive backup for premium accounts. maybeAutoBackup() decides whether
+  // to do anything (premium, connected, >24h since the last one, unmetered
+  // network) and never throws, so it is safe to fire from a lifecycle callback.
+  //
+  // Backgrounding is the best moment to trigger it: the user has stopped editing,
+  // so the snapshot is complete, and the upload doesn't compete with the UI. The
+  // launch call is the fallback for a device that is only ever force-quit.
+  useEffect(() => {
+    void maybeAutoBackup("app_launch");
+
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "background") {
+        void maybeAutoBackup("app_background");
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
+
   if (!loaded) {
     return null;
   }
@@ -84,6 +104,8 @@ export default function RootLayout() {
               <Stack.Screen name="location-details" />
               <Stack.Screen name="trip-details" />
               <Stack.Screen name="premium" options={{ presentation: "modal" }} />
+              <Stack.Screen name="backup" />
+              <Stack.Screen name="change-password" />
               <Stack.Screen name="diagnostics" />
             </Stack>
           </CreateTripContext.Provider>

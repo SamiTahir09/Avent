@@ -32,6 +32,11 @@ const FEATURE_COPY: Record<PremiumFeatureKey, { title: string; description: stri
     title: "Unlock Budget Planner",
     description: "Plan and track your trip budget with Premium.",
   },
+  drive_backup: {
+    title: "Unlock Google Drive Backup",
+    description:
+      "Premium backs your trips up to your own Google Drive, so a lost or replaced phone doesn't mean lost trips.",
+  },
 };
 
 interface PremiumPaywallProps {

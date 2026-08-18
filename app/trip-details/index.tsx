@@ -4,7 +4,6 @@ import { useLocalSearchParams, useRouter, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import moment from "moment";
 import CustomButton from "@/components/CustomButton";
-import { isDemoMode } from "@/config/env";
 import LocationPhotoGallery from "@/components/LocationPhotoGallery";
 import AIPackingSuggestions from "@/components/AIPackingSuggestions";
 import WeatherAdvice from "@/components/WeatherAdvice";

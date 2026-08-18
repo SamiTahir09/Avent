@@ -200,7 +200,7 @@ Analytics `purchase` events from a bypass grant carry `test_mode: true`, so they
 
 **Going live later:** set the flag to `false`. Nothing needs deleting — `services/billing/localEntitlement.ts` becomes dead weight and the expo-iap + Cloud Function path takes over. Existing test grants stay in SQLite but are ignored, since the bypass check runs before the read. Follow `BILLING_SETUP.md` for the Play Console side.
 
-**Note on Expo Go:** `RealBillingProvider` calls expo-iap's `useIAP()`, which is a native module. If you're testing in Expo Go rather than a dev build, set `EXPO_PUBLIC_DEMO_MODE=true` — the bypass works identically in the demo provider.
+**Note on Expo Go:** `RealBillingProvider` calls expo-iap's `useIAP()`, which is a native module. If you're testing in Expo Go rather than a dev build, `EXPO_PUBLIC_BILLING_BYPASS=true` alone is enough — it routes to `LocalBillingProvider`, which never touches `useIAP()`.
 
 ---
 
