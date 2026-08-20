@@ -21,3 +21,9 @@ web-build/
 
 expo-env.d.ts
 # @end expo-cli
+
+# Local secrets — keys live in EAS environment variables instead.
+# Push them with: npm run eas:env:push
+.env
+.env.local
+.env.*.local
