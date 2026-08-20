@@ -30,11 +30,9 @@ const DISCOVERY: AuthSession.DiscoveryDocument = {
 // backup lives in — "Connected to Google" with no address is the kind of vague
 // state that makes people distrust a backup. They are not used to sign anyone in;
 // Firebase Auth owns that. `drive.appdata` is the only data scope.
-const SCOPES = [
-  "https://www.googleapis.com/auth/drive.appdata",
-  "openid",
-  "email",
-];
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+
+const SCOPES = [DRIVE_SCOPE, "openid", "email"];
 
 const REFRESH_TOKEN_KEY = "avent_drive_refresh_token";
 const ACCOUNT_EMAIL_KEY = "avent_drive_account_email";
@@ -47,6 +45,7 @@ export type DriveAuthErrorCode =
   | "not_configured"
   | "not_connected"
   | "cancelled"
+  | "scope_denied"
   | "refresh_failed";
 
 export class DriveAuthError extends Error {
@@ -239,6 +238,22 @@ export async function connectDrive(): Promise<{ email: string | null }> {
     throw new DriveAuthError(
       "refresh_failed",
       "Google didn't return a refresh token. Remove Avent from your Google Account permissions and connect again."
+    );
+  }
+
+  // Google renders a checkbox per non-required permission, and "Allow" with the
+  // Drive box left unticked still returns a perfectly valid token — one that 403s
+  // on every Drive call. Without this check the app stores that token, reports
+  // itself connected, shows the account address, and then fails every backup with
+  // a raw API error that says nothing about the cause.
+  //
+  // Only enforced when Google actually tells us what it granted; an absent
+  // `scope` field is not evidence of a denial.
+  const grantedScopes = tokens.scope ? tokens.scope.split(" ") : [];
+  if (grantedScopes.length > 0 && !grantedScopes.includes(DRIVE_SCOPE)) {
+    throw new DriveAuthError(
+      "scope_denied",
+      "Google Drive access wasn't granted. Connect again and leave the Drive permission ticked on Google's consent screen."
     );
   }
 
