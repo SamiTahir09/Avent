@@ -44,6 +44,57 @@ const fetchUnsplashImage = async (query: string): Promise<string> => {
   }
 };
 
+/** A Gemini failure, split into a telemetry code and something a user can act on. */
+type GeminiFailure = { code: string; message: string };
+
+// Every Gemini failure arrives as one opaque Error whose message carries the
+// HTTP status, so that string is all we have to separate "the key is wrong" —
+// which no amount of retrying fixes — from "the network blipped", which
+// retrying does. Reporting every one of them as a connection problem is what
+// sent us chasing the network while a 401 sat in .env.
+const describeGeminiError = (err: any): GeminiFailure => {
+  if (err?.geminiTruncated) {
+    return {
+      code: "truncated_response",
+      message:
+        "The AI ran out of room before it finished your itinerary. Try a shorter trip, or try again.",
+    };
+  }
+
+  const msg = String(err?.message ?? err);
+
+  if (/\b401\b|\b403\b|UNAUTHENTICATED|PERMISSION_DENIED|API[_ ]?key/i.test(msg)) {
+    return {
+      code: "auth_failed",
+      message:
+        "The AI service rejected this app's credentials. That isn't something you can fix from here — please report it.",
+    };
+  }
+  if (/\b429\b|RESOURCE_EXHAUSTED|quota/i.test(msg)) {
+    return {
+      code: "rate_limited",
+      message: "The AI service is busy right now. Please try again in a few minutes.",
+    };
+  }
+  if (/\b404\b|not found/i.test(msg)) {
+    return {
+      code: "model_unavailable",
+      message: "The AI model is unavailable right now. Please try again later.",
+    };
+  }
+  if (err instanceof SyntaxError) {
+    return {
+      code: "invalid_json",
+      message: "The AI sent back a malformed itinerary. Please try again.",
+    };
+  }
+  return {
+    code: "network_error",
+    message:
+      "Couldn't generate your itinerary. Please check your connection and try again.",
+  };
+};
+
 const GenerateTrip = () => {
   const { tripData } = useContext(CreateTripContext);
   const [loading, setLoading] = useState(false);
@@ -159,30 +210,44 @@ const GenerateTrip = () => {
     const generateStartedAt = Date.now();
     try {
       const result = await chatSession.sendMessage(FINAL_PROMPT);
-      tripResponse = JSON.parse(result.response.text());
+      const raw = result.response.text();
+      const finishReason = result.response.candidates?.[0]?.finishReason;
+
+      // MAX_TOKENS is not a finish reason the SDK treats as fatal (it only
+      // throws on RECITATION, SAFETY and LANGUAGE), so a reply cut off
+      // mid-JSON arrives here looking like a success and then dies at
+      // JSON.parse with a message that says nothing about the real cause.
+      if (!raw.trim() || finishReason === "MAX_TOKENS") {
+        throw Object.assign(
+          new Error(
+            `Gemini returned no usable JSON (finishReason=${finishReason ?? "none"}, chars=${raw.length}, thoughtTokens=${result.response.usageMetadata?.thoughtsTokenCount ?? "?"})`
+          ),
+          { geminiTruncated: true }
+        );
+      }
+
+      tripResponse = JSON.parse(raw);
       void analytics.logEvent(AnalyticsEvent.TRIP_GENERATE_SUCCESS, {
         duration_ms: Date.now() - generateStartedAt,
         total_days: totalDays,
       });
     } catch (err: any) {
-      console.error("AI trip generation failed:", err);
+      const failure = describeGeminiError(err);
+      console.error(`AI trip generation failed (${failure.code}):`, err);
       await crash.recordError(err, {
         screen: "generate-trip",
         action: "gemini_sendMessage",
+        reason: failure.code,
       });
       void analytics.logEvent(AnalyticsEvent.TRIP_GENERATE_FAILED, {
-        reason: "gemini_error",
+        reason: failure.code,
         duration_ms: Date.now() - generateStartedAt,
       });
       // The free-trip credit was taken before this call, so give it back — two
       // transient Gemini errors would otherwise consume a user's whole free tier.
       await refundFreeTrip();
       setLoading(false);
-      setError(
-        err?.message?.includes("404") || err?.message?.includes("not found")
-          ? "The AI model is unavailable right now. Please try again later."
-          : "Couldn't generate your itinerary. Please check your connection and try again."
-      );
+      setError(failure.message);
       return;
     }
 
